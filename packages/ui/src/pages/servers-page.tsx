@@ -1,10 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link, useLocation } from "react-router-dom"
-import { Edit, MoreVertical, Plus, RefreshCw, Trash2 } from "lucide-react"
+import {
+  ChevronLeft,
+  ChevronRight,
+  Edit,
+  MoreVertical,
+  Plus,
+  RefreshCw,
+  Trash2,
+} from "lucide-react"
 
 import { TeamSpeak } from "@/api/teamspeak"
 import { useAuth, type QueryUser } from "@/auth/auth-context"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
@@ -41,6 +48,8 @@ type ConfirmAction =
 type ServersLocationState = {
   from?: string
 }
+
+const rowsPerPageOptions = [25, 50, 75, -1] as const
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) {
@@ -92,6 +101,15 @@ function sameServerId(left: string | number | undefined, right: string | number)
   return left !== undefined && String(left) === String(right)
 }
 
+function isUsableServerId(value: string | number | undefined | null) {
+  return (
+    value !== undefined &&
+    value !== null &&
+    String(value) !== "" &&
+    String(value) !== "0"
+  )
+}
+
 function ConfirmDialog({
   action,
   busy,
@@ -121,11 +139,16 @@ function ConfirmDialog({
               ? "Do really want to stop this virtual server instance?"
               : "Do really want to delete this virtual server instance?"}
           </p>
-          <div className="rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+          <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm font-medium">
             {action.server.virtualserverName}
           </div>
           <div className="flex justify-end gap-2">
-            <Button disabled={busy} type="button" variant="outline" onClick={onCancel}>
+            <Button
+              disabled={busy}
+              type="button"
+              variant="outline"
+              onClick={onCancel}
+            >
               Cancel
             </Button>
             <Button
@@ -159,8 +182,8 @@ function StatusControl({
       aria-label={online ? "Stop server" : "Start server"}
       aria-pressed={online}
       className={cn(
-        "relative h-6 w-11 rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-60",
-        online ? "border-primary bg-primary" : "border-input bg-muted",
+        "relative h-5 w-10 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+        online ? "bg-primary/80 hover:bg-primary" : "bg-muted-foreground/25",
       )}
       disabled={disabled}
       type="button"
@@ -168,7 +191,7 @@ function StatusControl({
     >
       <span
         className={cn(
-          "absolute top-0.5 size-4 rounded-full bg-background shadow transition-transform",
+          "absolute top-0.5 size-4 rounded-full bg-background shadow-sm transition-transform",
           online ? "left-5" : "left-0.5",
         )}
       />
@@ -179,23 +202,58 @@ function StatusControl({
 export function ServersPage() {
   const location = useLocation()
   const locationState = location.state as ServersLocationState | null
-  const {
-    queryUser,
-    serverId,
-    saveServerId,
-    removeServerId,
-    saveQueryUser,
-  } = useAuth()
+  const { queryUser, serverId, saveServerId, removeServerId, saveQueryUser } =
+    useAuth()
   const [servers, setServers] = useState<ServerRow[]>([])
   const [loading, setLoading] = useState(true)
   const [actionBusy, setActionBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null)
+  const [rowsPerPage, setRowsPerPage] =
+    useState<(typeof rowsPerPageOptions)[number]>(25)
+  const [page, setPage] = useState(0)
 
-  const selectedServerId = useMemo(
-    () => queryUser.virtualserverId ?? serverId,
-    [queryUser.virtualserverId, serverId],
-  )
+const firstOnlineServer = useMemo(
+  () =>
+    servers.find((server) => !isOffline(server.virtualserverStatus)),
+  [servers],
+)
+
+const selectedServerId = useMemo(() => {
+  if (isUsableServerId(queryUser.virtualserverId)) {
+    return queryUser.virtualserverId
+  }
+
+  if (isUsableServerId(serverId)) {
+    return serverId
+  }
+
+  return firstOnlineServer?.virtualserverId
+}, [firstOnlineServer?.virtualserverId, queryUser.virtualserverId, serverId])
+
+  const totalPages = useMemo(() => {
+    if (rowsPerPage === -1) {
+      return 1
+    }
+
+    return Math.max(1, Math.ceil(servers.length / rowsPerPage))
+  }, [rowsPerPage, servers.length])
+
+  const visibleServers = useMemo(() => {
+    if (rowsPerPage === -1) {
+      return servers
+    }
+
+    const start = page * rowsPerPage
+
+    return servers.slice(start, start + rowsPerPage)
+  }, [page, rowsPerPage, servers])
+
+  const visibleFrom = servers.length === 0 ? 0 : page * rowsPerPage + 1
+  const visibleTo =
+    rowsPerPage === -1
+      ? servers.length
+      : Math.min(servers.length, (page + 1) * rowsPerPage)
 
   const loadQueryUser = useCallback(async () => {
     const userInfo = await TeamSpeak.execute<QueryUser[]>("whoami")
@@ -215,6 +273,26 @@ export function ServersPage() {
     },
     [saveQueryUser, saveServerId],
   )
+  
+  useEffect(() => {
+  const hasSelectedServer =
+    isUsableServerId(queryUser.virtualserverId) || isUsableServerId(serverId)
+
+  if (loading || actionBusy || hasSelectedServer || !firstOnlineServer) {
+    return
+  }
+
+  void selectServer(firstOnlineServer.virtualserverId).catch((selectError) => {
+    setError(getErrorMessage(selectError))
+  })
+}, [
+  actionBusy,
+  firstOnlineServer,
+  loading,
+  queryUser.virtualserverId,
+  selectServer,
+  serverId,
+])
 
   const loadServers = useCallback(
     async (
@@ -256,6 +334,10 @@ export function ServersPage() {
   }, [loadServers, locationState?.from])
 
   useEffect(() => {
+    setPage((currentPage) => Math.min(currentPage, totalPages - 1))
+  }, [totalPages])
+
+  useEffect(() => {
     const timerId = window.setInterval(() => {
       setServers((currentServers) =>
         currentServers.map((server) =>
@@ -263,7 +345,8 @@ export function ServersPage() {
             ? server
             : {
                 ...server,
-                virtualserverUptime: normalizeUptime(server.virtualserverUptime) + 1,
+                virtualserverUptime:
+                  normalizeUptime(server.virtualserverUptime) + 1,
               },
         ),
       )
@@ -362,12 +445,12 @@ export function ServersPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-5">
+    <div className="mx-auto w-full max-w-7xl space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Server List</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Servers List</h1>
           <p className="text-sm text-muted-foreground">
-            Manage TeamSpeak virtual servers
+            Manage your TeamSpeak virtual servers
           </p>
         </div>
         <div className="flex gap-2">
@@ -395,35 +478,52 @@ export function ServersPage() {
         </div>
       ) : null}
 
-      <Card>
+      <Card className="overflow-hidden rounded-sm shadow-sm">
         <CardContent className="p-0">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead className="w-12">Actions</TableHead>
-                <TableHead className="w-16">Select</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Port</TableHead>
-                <TableHead>Clients</TableHead>
-                <TableHead>Uptime</TableHead>
-                <TableHead>Status</TableHead>
+              <TableRow className="h-16 hover:bg-transparent">
+                <TableHead className="w-14" />
+                <TableHead className="w-24 text-xs font-semibold">
+                  Select
+                </TableHead>
+                <TableHead className="text-xs font-semibold">Name</TableHead>
+                <TableHead className="w-28 text-xs font-semibold">
+                  Port
+                </TableHead>
+                <TableHead className="w-32 text-xs font-semibold">
+                  Clients
+                </TableHead>
+                <TableHead className="w-48 text-xs font-semibold">
+                  Uptime (d:h:m:s)
+                </TableHead>
+                <TableHead className="w-32 text-xs font-semibold">
+                  Status
+                </TableHead>
               </TableRow>
             </TableHeader>
+
             <TableBody>
               {loading ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                <TableRow className="h-20">
+                  <TableCell
+                    colSpan={7}
+                    className="text-center text-sm text-muted-foreground"
+                  >
                     Loading servers...
                   </TableCell>
                 </TableRow>
               ) : servers.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                <TableRow className="h-20">
+                  <TableCell
+                    colSpan={7}
+                    className="text-center text-sm text-muted-foreground"
+                  >
                     No virtual servers found.
                   </TableCell>
                 </TableRow>
               ) : (
-                servers.map((server) => {
+                visibleServers.map((server) => {
                   const offline = isOffline(server.virtualserverStatus)
                   const selected = sameServerId(
                     selectedServerId,
@@ -431,18 +531,28 @@ export function ServersPage() {
                   )
 
                   return (
-                    <TableRow key={String(server.virtualserverId)} data-state={selected ? "selected" : undefined}>
+                    <TableRow
+                      key={String(server.virtualserverId)}
+                      className="h-16 hover:bg-muted/30"
+                      data-state={selected ? "selected" : undefined}
+                    >
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button aria-label="Open server actions" size="icon" variant="ghost">
+                            <Button
+                              aria-label="Open server actions"
+                              size="icon"
+                              variant="ghost"
+                            >
                               <MoreVertical className="size-4" />
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="start" className="w-40">
                             <DropdownMenuItem asChild disabled={offline}>
                               <Link
-                                className={cn(offline && "pointer-events-none opacity-50")}
+                                className={cn(
+                                  offline && "pointer-events-none opacity-50",
+                                )}
                                 to="/server/edit"
                               >
                                 <Edit className="size-4" />
@@ -450,7 +560,7 @@ export function ServersPage() {
                               </Link>
                             </DropdownMenuItem>
                             <DropdownMenuItem
-                              variant="destructive"
+                              className="text-destructive focus:text-destructive"
                               onSelect={() =>
                                 setConfirmAction({ type: "delete", server })
                               }
@@ -461,6 +571,7 @@ export function ServersPage() {
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
+
                       <TableCell>
                         <input
                           aria-label={`Select ${server.virtualserverName}`}
@@ -472,27 +583,24 @@ export function ServersPage() {
                           onChange={() => void handleSelectServer(server)}
                         />
                       </TableCell>
+
                       <TableCell className="font-medium">
                         {server.virtualserverName}
                       </TableCell>
                       <TableCell>{server.virtualserverPort}</TableCell>
                       <TableCell>
-                        {server.virtualserverClientsonline}/{server.virtualserverMaxclients}
+                        {server.virtualserverClientsonline}/
+                        {server.virtualserverMaxclients}
                       </TableCell>
                       <TableCell className="font-mono text-xs">
                         {formatUptime(server.virtualserverUptime)}
                       </TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-3">
-                          <StatusControl
-                            disabled={loading || actionBusy}
-                            server={server}
-                            onChangeStatus={changeServerStatus}
-                          />
-                          <Badge variant={offline ? "outline" : "secondary"}>
-                            {server.virtualserverStatus}
-                          </Badge>
-                        </div>
+                        <StatusControl
+                          disabled={loading || actionBusy}
+                          server={server}
+                          onChangeStatus={changeServerStatus}
+                        />
                       </TableCell>
                     </TableRow>
                   )
@@ -500,8 +608,63 @@ export function ServersPage() {
               )}
             </TableBody>
           </Table>
+
+          <div className="flex min-h-14 items-center justify-end gap-8 border-t px-4 text-xs text-muted-foreground">
+            <div className="flex items-center gap-3">
+              <span>Rows per page:</span>
+              <select
+                className="h-8 rounded-md border border-transparent bg-transparent px-2 text-foreground outline-none hover:border-border focus:border-border"
+                value={rowsPerPage}
+                onChange={(event) => {
+                  setRowsPerPage(Number(event.target.value) as typeof rowsPerPage)
+                  setPage(0)
+                }}
+              >
+                {rowsPerPageOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option === -1 ? "All" : option}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <span>
+              {visibleFrom}-{visibleTo} of {servers.length}
+            </span>
+
+            <div className="flex items-center gap-1">
+              <Button
+                disabled={page === 0 || rowsPerPage === -1}
+                size="icon"
+                type="button"
+                variant="ghost"
+                onClick={() => setPage((currentPage) => currentPage - 1)}
+              >
+                <ChevronLeft className="size-4" />
+              </Button>
+              <Button
+                disabled={page >= totalPages - 1 || rowsPerPage === -1}
+                size="icon"
+                type="button"
+                variant="ghost"
+                onClick={() => setPage((currentPage) => currentPage + 1)}
+              >
+                <ChevronRight className="size-4" />
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
+
+      {/* <Button
+        asChild
+        className="fixed bottom-6 right-6 z-30 size-12 rounded-full shadow-lg"
+        size="icon"
+      >
+        <Link aria-label="Create server" to="/server/create">
+          <Plus className="size-5" />
+        </Link>
+      </Button> */}
 
       <ConfirmDialog
         action={confirmAction}
