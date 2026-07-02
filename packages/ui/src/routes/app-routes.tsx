@@ -1,7 +1,9 @@
 import { Navigate, Route, Routes } from "react-router-dom"
 
 import { ProtectedRoute } from "@/auth/protected-route"
+import { AppLayout } from "@/layouts/app-layout"
 import { LoginPage } from "@/pages/login-page"
+import { LogoutPage } from "@/pages/logout-page"
 import { PlaceholderPage } from "@/pages/placeholder-page"
 
 type MappedRoute = {
@@ -64,14 +66,16 @@ export function AppRoutes() {
       <Route path="/login" element={<LoginPage />} />
 
       <Route element={<ProtectedRoute />}>
-        {protectedRoutes.map((route) => (
-          <Route
-            key={route.path}
-            path={route.path}
-            element={<PlaceholderPage title={route.title} />}
-          />
-        ))}
-        <Route path="/logout" element={<Navigate to="/login" replace />} />
+        <Route element={<AppLayout />}>
+          {protectedRoutes.map((route) => (
+            <Route
+              key={route.path}
+              path={route.path}
+              element={<PlaceholderPage title={route.title} />}
+            />
+          ))}
+          <Route path="/logout" element={<LogoutPage />} />
+        </Route>
       </Route>
 
       <Route path="*" element={<Navigate to="/login" replace />} />
