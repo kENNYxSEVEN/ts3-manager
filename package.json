@@ -19,6 +19,7 @@
     }
   },
   "devDependencies": {
+    "autoprefixer": "^10.5.2",
     "concurrently": "^6.2.0"
   }
 }
