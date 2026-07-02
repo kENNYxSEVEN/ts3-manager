@@ -1,26 +1,5 @@
-import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+import { AppRoutes } from "@/routes/app-routes"
 
 export default function App() {
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>TS3 Manager</CardTitle>
-          <CardDescription>
-            React + shadcn frontend foundation is ready.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button className="w-full">Ready for redesign mapping</Button>
-        </CardContent>
-      </Card>
-    </main>
-  )
+  return <AppRoutes />
 }
