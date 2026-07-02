@@ -17,6 +17,11 @@ type AutofillResponse = {
   message?: string
 }
 
+type QueryUser = {
+  virtualserverId?: string | number
+  [key: string]: unknown
+}
+
 type TeamSpeakError = {
   id?: string | number
   message?: string
@@ -107,5 +112,24 @@ export const TeamSpeak = {
         (response: T | TeamSpeakError) => handleResponse<T>(response, resolve, reject),
       )
     })
+  },
+
+  registerEvents() {
+    ensureSocketConnected()
+
+    return new Promise<unknown>((resolve, reject) => {
+      socket.emit("teamspeak-registerevents", (response: TeamSpeakError | unknown) =>
+        handleResponse(response, resolve, reject),
+      )
+    })
+  },
+
+  async selectServer(sid: string | number) {
+    await TeamSpeak.execute("use", { sid })
+    await TeamSpeak.registerEvents()
+
+    const userInfo = await TeamSpeak.execute<QueryUser[]>("whoami")
+
+    return userInfo[0]
   },
 }

@@ -5,6 +5,7 @@ import { AppLayout } from "@/layouts/app-layout"
 import { LoginPage } from "@/pages/login-page"
 import { LogoutPage } from "@/pages/logout-page"
 import { PlaceholderPage } from "@/pages/placeholder-page"
+import { ServersPage } from "@/pages/servers-page"
 
 type MappedRoute = {
   path: string
@@ -67,13 +68,16 @@ export function AppRoutes() {
 
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
-          {protectedRoutes.map((route) => (
-            <Route
-              key={route.path}
-              path={route.path}
-              element={<PlaceholderPage title={route.title} />}
-            />
-          ))}
+          <Route path="/servers" element={<ServersPage />} />
+          {protectedRoutes
+            .filter((route) => route.path !== "/servers")
+            .map((route) => (
+              <Route
+                key={route.path}
+                path={route.path}
+                element={<PlaceholderPage title={route.title} />}
+              />
+            ))}
           <Route path="/logout" element={<LogoutPage />} />
         </Route>
       </Route>

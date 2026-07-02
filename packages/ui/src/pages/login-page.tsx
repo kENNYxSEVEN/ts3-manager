@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react"
 import { useNavigate } from "react-router-dom"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 import { TeamSpeak } from "@/api/teamspeak"
 import { useAuth } from "@/auth/auth-context"
@@ -134,7 +135,7 @@ export function LoginPage() {
       saveToken(response.token)
       setConnected(true)
       setLoggedOut(false)
-      navigate("/servers")
+      navigate("/servers", { state: { from: "/login" } })
     } catch (connectError) {
       setError(getErrorMessage(connectError))
     } finally {
@@ -143,7 +144,15 @@ export function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
+  <div className="flex min-h-screen flex-col bg-background text-foreground">
+    <header className="flex h-14 shrink-0 items-center justify-between border-b bg-background/95 px-4 backdrop-blur lg:px-6">
+      <div>
+      </div>
+
+      <ThemeToggle />
+    </header>
+
+    <main className="flex min-h-0 flex-1 items-center justify-center p-6">
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>TS3 Manager</CardTitle>
@@ -229,5 +238,6 @@ export function LoginPage() {
         </CardContent>
       </Card>
     </main>
-  )
+  </div>
+)
 }
