@@ -14,11 +14,11 @@ export default function App() {
         <CardHeader>
           <CardTitle>TS3 Manager</CardTitle>
           <CardDescription>
-            New React + shadcn dashboard is running.
+            React + shadcn frontend foundation is ready.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Button className="w-full">Continue</Button>
+          <Button className="w-full">Ready for redesign mapping</Button>
         </CardContent>
       </Card>
     </main>
