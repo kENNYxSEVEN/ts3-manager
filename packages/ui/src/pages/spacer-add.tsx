@@ -6,7 +6,7 @@ import {
   useState,
   type FormEvent,
 } from "react"
-import { useNavigate, useParams, useSearchParams } from "react-router-dom"
+import { useNavigate } from "react-router-dom"
 import { ChevronDown } from "lucide-react"
 
 import { TeamSpeak } from "@/api/teamspeak"
@@ -18,17 +18,29 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
-type ChannelFormMode = "add" | "edit"
+type SpacerAlignment = "" | "l" | "c" | "r"
 
-type ChannelFormProps = {
-  mode: ChannelFormMode
+type ChannelType = "temporary" | "permanent" | "semi-permanent"
+
+type SpacerForm = {
+  specialSpacer: string
+  spacerAlignment: SpacerAlignment
+  spacerText: string
+  channelPassword: string
+  channelTopic: string
+  channelDescription: string
+  channelOrder: string
+  channelMaxclients: string
+  channelFlagMaxclientsUnlimited: boolean | null
+  channelType: ChannelType
+  channelFlagDefault: boolean
+  voiceDataEncrypted: boolean
 }
 
 type ChannelRow = {
   cid: string | number
   pid: string | number
   channelName: string
-  channelOrder?: string | number
   [key: string]: unknown
 }
 
@@ -37,57 +49,46 @@ type ServerInfo = {
   [key: string]: unknown
 }
 
-type ChannelFormState = {
-  channelName: string
-  channelPassword: string
-  channelTopic: string
-  channelDescription: string
-  channelOrder: string
-  channelMaxclients: string
-  channelFlagMaxclientsUnlimited: boolean | null
-  channelType: "temporary" | "permanent" | "semi-permanent"
-  channelFlagDefault: boolean
-  voiceDataEncrypted: boolean
+type SelectOption = {
+  label: string
+  value: string
 }
 
-type ChannelChanges = {
-  channelName?: string
-  channelPassword?: string
-  channelTopic?: string
-  channelDescription?: string
-  channelOrder?: number
-  channelMaxclients?: number
-  channelFlagMaxclientsUnlimited?: number
-  channelFlagPermanent?: number
-  channelFlagSemiPermanent?: number
-  channelFlagDefault?: number
-  channelCodecIsUnencrypted?: number
-}
+const spacerPageDataFlights = new Map<
+  string,
+  Promise<{ channels: ChannelRow[]; serverInfo: ServerInfo }>
+>()
 
-type ChannelPageData = {
-  channel?: ChannelRow
-  channels: ChannelRow[]
-  serverInfo: ServerInfo
-  parentChannelId: string
-}
-
-type SaveAction = "ok" | "apply"
-
-const channelInfoFlights = new Map<string, Promise<ChannelRow>>()
-const channelPageDataFlights = new Map<string, Promise<ChannelPageData>>()
-
-const defaultForm: ChannelFormState = {
-  channelName: "",
+const defaultForm: SpacerForm = {
+  specialSpacer: "",
+  spacerAlignment: "",
+  spacerText: "",
   channelPassword: "",
   channelTopic: "",
   channelDescription: "",
   channelOrder: "0",
   channelMaxclients: "",
   channelFlagMaxclientsUnlimited: null,
-  channelType: "temporary",
+  channelType: "permanent",
   channelFlagDefault: false,
   voiceDataEncrypted: false,
 }
+
+const specialSpacerList: SelectOption[] = [
+  { label: "", value: "" },
+  { label: "---", value: "---" },
+  { label: "...", value: "..." },
+  { label: "-.-", value: "-.-" },
+  { label: "___", value: "___" },
+  { label: "-..", value: "-.." },
+]
+
+const spacerAlignmentList: SelectOption[] = [
+  { label: "", value: "" },
+  { label: "left", value: "l" },
+  { label: "center", value: "c" },
+  { label: "right", value: "r" },
+]
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) {
@@ -114,100 +115,113 @@ function isUsableServerId(value: string | number | undefined | null) {
   )
 }
 
-function toBooleanFlag(value: unknown) {
-  return value === true || value === 1 || value === "1"
+function buildSpacerName(form: SpacerForm) {
+  const randomId = Math.floor(Math.random() * 100)
+
+  return `[${form.spacerAlignment}spacer${randomId}]${
+    form.specialSpacer || form.spacerText
+  }`
 }
 
-function formFromChannel(channel: ChannelRow): ChannelFormState {
-  return {
-    channelName: String(channel.channelName ?? ""),
-    channelPassword: String(channel.channelPassword ?? ""),
-    channelTopic: String(channel.channelTopic ?? ""),
-    channelDescription: String(channel.channelDescription ?? ""),
-    channelOrder: String(channel.channelOrder ?? "0"),
-    channelMaxclients: String(channel.channelMaxclients ?? ""),
-    channelFlagMaxclientsUnlimited: toBooleanFlag(
-      channel.channelFlagMaxclientsUnlimited,
-    ),
-    channelType: toBooleanFlag(channel.channelFlagPermanent)
-      ? "permanent"
-      : toBooleanFlag(channel.channelFlagSemiPermanent)
-        ? "semi-permanent"
-        : "temporary",
-    channelFlagDefault: toBooleanFlag(channel.channelFlagDefault),
-    voiceDataEncrypted:
-      channel.channelCodecIsUnencrypted === undefined
-        ? true
-        : !toBooleanFlag(channel.channelCodecIsUnencrypted),
-  }
-}
-
-function changesFromForm(form: ChannelFormState): ChannelChanges {
-  const changes: ChannelChanges = {
-    channelName: form.channelName,
-    channelPassword: form.channelPassword,
-    channelTopic: form.channelTopic,
-    channelDescription: form.channelDescription,
-    channelOrder: Number(form.channelOrder) || 0,
-    channelMaxclients: Number(form.channelMaxclients) || 0,
+function buildSpacerPayload(form: SpacerForm) {
+  const payload: Record<string, unknown> = {
+    channelName: buildSpacerName(form),
     channelFlagPermanent: form.channelType === "permanent" ? 1 : 0,
     channelFlagSemiPermanent: form.channelType === "semi-permanent" ? 1 : 0,
-    channelFlagDefault: form.channelFlagDefault ? 1 : 0,
-    channelCodecIsUnencrypted: form.voiceDataEncrypted ? 0 : 1,
+  }
+
+  if (form.channelPassword) {
+    payload.channelPassword = form.channelPassword
+  }
+
+  if (form.channelTopic) {
+    payload.channelTopic = form.channelTopic
+  }
+
+  if (form.channelDescription) {
+    payload.channelDescription = form.channelDescription
+  }
+
+  if (form.channelOrder !== "0") {
+    payload.channelOrder = Number(form.channelOrder) || 0
+  }
+
+  if (form.channelMaxclients.trim()) {
+    payload.channelMaxclients = Number(form.channelMaxclients) || 0
   }
 
   if (form.channelFlagMaxclientsUnlimited !== null) {
-    changes.channelFlagMaxclientsUnlimited = form.channelFlagMaxclientsUnlimited ? 1 : 0
+    payload.channelFlagMaxclientsUnlimited = form.channelFlagMaxclientsUnlimited ? 1 : 0
   }
 
-  return changes
-}
-
-function changedValues(form: ChannelFormState, initialForm: ChannelFormState) {
-  const current = changesFromForm(form)
-  const initial = changesFromForm(initialForm)
-  const changes: ChannelChanges = {}
-
-  for (const key of Object.keys(current) as Array<keyof ChannelChanges>) {
-    if (current[key] !== initial[key]) {
-      changes[key] = current[key] as never
-    }
+  if (form.channelFlagDefault) {
+    payload.channelFlagDefault = 1
   }
 
-  return changes
-}
-
-function createValues(form: ChannelFormState) {
-  const changes = changedValues(form, defaultForm)
-
-  changes.channelName = form.channelName
-
-  return changes
-}
-
-function isTemporaryChannel(form: ChannelFormState) {
-  return form.channelType === "temporary"
-}
-
-async function getChannelInfo(cid: string) {
-  let flight = channelInfoFlights.get(cid)
-
-  if (!flight) {
-    flight = TeamSpeak.execute<ChannelRow[]>("channelinfo", { cid })
-      .then((channelInfo) => channelInfo[0] ?? ({} as ChannelRow))
-      .finally(() => {
-        channelInfoFlights.delete(cid)
-      })
-
-    channelInfoFlights.set(cid, flight)
+  if (form.voiceDataEncrypted) {
+    payload.channelCodecIsUnencrypted = 0
   }
 
-  return flight
+  return payload
 }
 
-type ChannelOrderOption = {
+function SimpleSelect({
+  disabled,
+  id,
+  label,
+  onChange,
+  options,
+  value,
+}: {
+  disabled?: boolean
+  id: string
   label: string
+  onChange: (value: string) => void
+  options: SelectOption[]
   value: string
+}) {
+  const selectedOption = options.find((option) => option.value === value)
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div className="relative">
+      <Label className="mb-2 block" htmlFor={id}>
+        {label}
+      </Label>
+      <button
+        className="flex h-10 w-full items-center justify-between rounded-md border bg-background px-3 text-left text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+        disabled={disabled}
+        id={id}
+        type="button"
+        onBlur={() => {
+          window.setTimeout(() => setOpen(false), 120)
+        }}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span className="truncate">{selectedOption?.label ?? ""}</span>
+        <ChevronDown className={`size-4 shrink-0 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+
+      {open ? (
+        <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-50 mt-1 max-h-72 overflow-y-auto rounded-md border bg-popover py-1 text-popover-foreground shadow-md">
+          {options.map((option) => (
+            <button
+              className="flex min-h-10 w-full items-center px-3 py-2 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+              key={option.value || "empty"}
+              type="button"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                onChange(option.value)
+                setOpen(false)
+              }}
+            >
+              <span className="truncate">{option.label}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 function ChannelOrderCombobox({
@@ -221,7 +235,7 @@ function ChannelOrderCombobox({
   disabled: boolean
   id: string
   onChange: (value: string) => void
-  options: ChannelOrderOption[]
+  options: SelectOption[]
   placeholder: string
   value: string
 }) {
@@ -259,7 +273,7 @@ function ChannelOrderCombobox({
     )
   }, [options, query])
 
-  const selectOption = (option: ChannelOrderOption) => {
+  const selectOption = (option: SelectOption) => {
     setHasUserSelection(true)
     onChange(option.value)
     setQuery("")
@@ -369,43 +383,27 @@ function ChannelOrderCombobox({
   )
 }
 
-export function ChannelForm({ mode }: ChannelFormProps) {
+export function SpacerAdd() {
   const navigate = useNavigate()
-  const params = useParams()
-  const [searchParams] = useSearchParams()
   const { queryUser, saveQueryUser, saveServerId, serverId } = useAuth()
   const queryUserRef = useRef(queryUser)
   const { dismissToast, showError, toasts } = useErrorToastStack()
-  const cid = params.cid
-  const requestedParentId = searchParams.get("pid") ?? "0"
-  const [parentChannelId, setParentChannelId] = useState(requestedParentId)
+  const [form, setForm] = useState(defaultForm)
   const [channels, setChannels] = useState<ChannelRow[]>([])
   const [serverInfo, setServerInfo] = useState<ServerInfo>({})
-  const [form, setForm] = useState<ChannelFormState>(defaultForm)
-  const [initialForm, setInitialForm] = useState<ChannelFormState>(defaultForm)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [moreOptionsOpen, setMoreOptionsOpen] = useState(false)
-  const [temporaryWarning, setTemporaryWarning] = useState(false)
-  const [pendingChanges, setPendingChanges] = useState<ChannelChanges | null>(null)
 
   useEffect(() => {
     queryUserRef.current = queryUser
   }, [queryUser])
 
-  const selectedServerId = useMemo(() => {
-    if (isUsableServerId(queryUser.virtualserverId)) {
-      return queryUser.virtualserverId
-    }
-
-    if (isUsableServerId(serverId)) {
-      return serverId
-    }
-
-    return undefined
-  }, [queryUser.virtualserverId, serverId])
-
   const ensureSelectedServer = useCallback(async () => {
+    const selectedServerId = isUsableServerId(queryUserRef.current.virtualserverId)
+      ? queryUserRef.current.virtualserverId
+      : serverId
+
     if (!isUsableServerId(selectedServerId)) {
       throw new Error("No valid virtual server selected.")
     }
@@ -430,49 +428,32 @@ export function ChannelForm({ mode }: ChannelFormProps) {
     }
 
     return nextQueryUser
-  }, [saveQueryUser, saveServerId, selectedServerId])
+  }, [saveQueryUser, saveServerId, serverId])
 
   const loadPageData = useCallback(async () => {
-    if (mode === "edit" && !cid) {
-      throw new Error("Channel id is missing.")
-    }
-
     await ensureSelectedServer()
 
-    const key = mode + ":" + (cid ?? "new") + ":" + requestedParentId
-    let flight = channelPageDataFlights.get(key)
+    const key = String(queryUserRef.current.virtualserverId ?? serverId ?? "default")
+    let flight = spacerPageDataFlights.get(key)
 
     if (!flight) {
-      flight = (async () => {
-        const [channel, nextChannels, serverInfoList] = await Promise.all([
-          mode === "edit" && cid
-            ? getChannelInfo(cid)
-            : Promise.resolve(undefined),
-          TeamSpeak.execute<ChannelRow[]>("channellist"),
-          TeamSpeak.execute<ServerInfo[]>("serverinfo"),
-        ])
-        const nextParentId =
-          requestedParentId !== "0"
-            ? requestedParentId
-            : channel?.pid !== undefined
-              ? String(channel.pid)
-              : "0"
-
-        return {
-          channel,
+      flight = Promise.all([
+        TeamSpeak.execute<ChannelRow[]>("channellist"),
+        TeamSpeak.execute<ServerInfo[]>("serverinfo"),
+      ])
+        .then(([nextChannels, serverInfoList]) => ({
           channels: nextChannels,
           serverInfo: serverInfoList[0] ?? {},
-          parentChannelId: nextParentId,
-        }
-      })().finally(() => {
-        channelPageDataFlights.delete(key)
-      })
+        }))
+        .finally(() => {
+          spacerPageDataFlights.delete(key)
+        })
 
-      channelPageDataFlights.set(key, flight)
+      spacerPageDataFlights.set(key, flight)
     }
 
     return flight
-  }, [cid, ensureSelectedServer, mode, requestedParentId])
+  }, [ensureSelectedServer, serverId])
 
   useEffect(() => {
     let active = true
@@ -487,15 +468,6 @@ export function ChannelForm({ mode }: ChannelFormProps) {
 
         setChannels(data.channels)
         setServerInfo(data.serverInfo)
-        setParentChannelId(data.parentChannelId)
-
-        const nextForm =
-          mode === "edit" && data.channel
-            ? formFromChannel(data.channel)
-            : defaultForm
-
-        setForm(nextForm)
-        setInitialForm(nextForm)
       })
       .catch((loadError: unknown) => {
         if (active) {
@@ -511,35 +483,23 @@ export function ChannelForm({ mode }: ChannelFormProps) {
     return () => {
       active = false
     }
-  }, [loadPageData, mode, showError])
+  }, [loadPageData, showError])
 
   const channelOrderOptions = useMemo(() => {
-    const siblingChannels = channels
-      .filter(
-        (channel) =>
-          String(channel.pid) === String(parentChannelId) &&
-          String(channel.cid) !== String(cid ?? ""),
-      )
-      .map((channel) => ({
-        label: channel.channelName,
-        value: String(channel.cid),
-      }))
-
-    const rootLabel =
-      parentChannelId !== "0"
-        ? channels.find((channel) => String(channel.cid) === String(parentChannelId))
-            ?.channelName
-        : serverInfo.virtualserverName
+    const rootLabel = serverInfo.virtualserverName || "Root"
 
     return [
-      { label: rootLabel || "Root", value: "0" },
-      ...siblingChannels,
+      { label: rootLabel, value: "0" },
+      ...channels.map((channel) => ({
+        label: channel.channelName,
+        value: String(channel.cid),
+      })),
     ]
-  }, [channels, cid, parentChannelId, serverInfo.virtualserverName])
+  }, [channels, serverInfo.virtualserverName])
 
-  const updateField = <Key extends keyof ChannelFormState>(
+  const updateField = <Key extends keyof SpacerForm>(
     key: Key,
-    value: ChannelFormState[Key],
+    value: SpacerForm[Key],
   ) => {
     setForm((currentForm) => ({
       ...currentForm,
@@ -547,84 +507,22 @@ export function ChannelForm({ mode }: ChannelFormProps) {
     }))
   }
 
-  const submitChanges = async (changes: ChannelChanges, action: SaveAction) => {
-    await ensureSelectedServer()
-
-    if (mode === "add") {
-      await TeamSpeak.execute("channelcreate", {
-        ...changes,
-        cpid: Number(parentChannelId) || 0,
-      })
-      navigate(-1)
-      return
-    }
-
-    if (!cid) {
-      throw new Error("Channel id is missing.")
-    }
-
-    if (Object.keys(changes).length) {
-      await TeamSpeak.execute("channeledit", {
-        cid,
-        ...changes,
-      })
-    }
-
-    if (action === "ok") {
-      navigate(-1)
-      return
-    }
-
-    const nextChannel = await getChannelInfo(cid)
-    const nextForm = formFromChannel(nextChannel)
-
-    setForm(nextForm)
-    setInitialForm(nextForm)
-  }
-
-  const saveForm = async (action: SaveAction) => {
-    if (!form.channelName.trim()) {
-      showError("Name is required.")
-      return
-    }
-
-    const changes = mode === "add" ? createValues(form) : changedValues(form, initialForm)
-
-    if (mode === "edit" && isTemporaryChannel(form) && !isTemporaryChannel(initialForm)) {
-      setPendingChanges(changes)
-      setTemporaryWarning(true)
-      return
-    }
-
-    setSubmitting(true)
-
-    try {
-      await submitChanges(changes, action)
-    } catch (submitError) {
-      showError(getErrorMessage(submitError))
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    void saveForm("ok")
-  }
 
-  const confirmTemporarySave = async () => {
-    if (!pendingChanges) {
-      setTemporaryWarning(false)
+    if (!form.specialSpacer && !form.spacerText.trim()) {
+      showError("Spacer text or special spacer is required.")
       return
     }
 
     setSubmitting(true)
 
     try {
-      await submitChanges(pendingChanges, "ok")
+      await ensureSelectedServer()
+      await TeamSpeak.execute("channelcreate", buildSpacerPayload(form))
+      navigate(-1)
     } catch (submitError) {
       showError(getErrorMessage(submitError))
-      setTemporaryWarning(false)
     } finally {
       setSubmitting(false)
     }
@@ -638,7 +536,7 @@ export function ChannelForm({ mode }: ChannelFormProps) {
 
       <Card>
         <CardHeader>
-          <CardTitle>{mode === "add" ? "Create Channel" : "Channel Edit"}</CardTitle>
+          <CardTitle>Create Spacer</CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -647,33 +545,55 @@ export function ChannelForm({ mode }: ChannelFormProps) {
             </div>
           ) : (
             <form className="space-y-5" onSubmit={handleSubmit}>
-              <div className="space-y-2">
-                <Label htmlFor="channelName">Name</Label>
-                <Input
-                  disabled={busy}
-                  id="channelName"
-                  required
-                  value={form.channelName}
-                  onChange={(event) => updateField("channelName", event.target.value)}
+              <SimpleSelect
+                disabled={busy || Boolean(form.spacerAlignment || form.spacerText)}
+                id="specialSpacer"
+                label="Special Spacer"
+                options={specialSpacerList}
+                value={form.specialSpacer}
+                onChange={(value) => updateField("specialSpacer", value)}
+              />
+
+              <div className="grid items-start gap-4 sm:grid-cols-2">
+                <SimpleSelect
+                  disabled={busy || Boolean(form.specialSpacer)}
+                  id="spacerAlignment"
+                  label="Alignment"
+                  options={spacerAlignmentList}
+                  value={form.spacerAlignment}
+                  onChange={(value) =>
+                    updateField("spacerAlignment", value as SpacerAlignment)
+                  }
                 />
+
+                <div className="space-y-2">
+                  <Label htmlFor="spacerText">Text</Label>
+                  <Input
+                    className="h-10"
+                    disabled={busy || Boolean(form.specialSpacer)}
+                    id="spacerText"
+                    value={form.spacerText}
+                    onChange={(event) => updateField("spacerText", event.target.value)}
+                  />
+                </div>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="channelPassword">Password</Label>
                 <Input
+                  className="h-10"
                   disabled={busy}
                   id="channelPassword"
                   type="password"
                   value={form.channelPassword}
-                  onChange={(event) =>
-                    updateField("channelPassword", event.target.value)
-                  }
+                  onChange={(event) => updateField("channelPassword", event.target.value)}
                 />
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="channelTopic">Topic</Label>
                 <Input
+                  className="h-10"
                   disabled={busy}
                   id="channelTopic"
                   value={form.channelTopic}
@@ -790,7 +710,7 @@ export function ChannelForm({ mode }: ChannelFormProps) {
                         <div className="flex items-center gap-2">
                           <Checkbox
                             checked={form.channelFlagDefault}
-                            disabled={busy || toBooleanFlag(initialForm.channelFlagDefault)}
+                            disabled={busy}
                             id="channelDefault"
                             onCheckedChange={(checked) =>
                               updateField("channelFlagDefault", checked === true)
@@ -820,7 +740,6 @@ export function ChannelForm({ mode }: ChannelFormProps) {
                 <Button disabled={busy} type="submit">
                   {submitting ? "Saving..." : "OK"}
                 </Button>
-
                 <Button
                   disabled={busy}
                   type="button"
@@ -829,56 +748,11 @@ export function ChannelForm({ mode }: ChannelFormProps) {
                 >
                   CANCEL
                 </Button>
-
-                {mode === "edit" ? (
-                  <Button
-                    disabled={busy}
-                    type="button"
-                    variant="outline"
-                    onClick={() => void saveForm("apply")}
-                  >
-                    {submitting ? "SAVING..." : "APPLY"}
-                  </Button>
-                ) : null}
-
               </div>
             </form>
           )}
         </CardContent>
       </Card>
-
-      {temporaryWarning ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm">
-          <Card className="w-full max-w-md shadow-lg">
-            <CardHeader>
-              <CardTitle>Temporary Channel</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                If there are no clients inside the channel and you change it to
-                temporary, the channel will be deleted. Do you want to continue?
-              </p>
-              <div className="flex justify-end gap-2">
-                <Button
-                  disabled={submitting}
-                  type="button"
-                  variant="outline"
-                  onClick={() => setTemporaryWarning(false)}
-                >
-                  No
-                </Button>
-                <Button
-                  disabled={submitting}
-                  type="button"
-                  onClick={() => void confirmTemporarySave()}
-                >
-                  {submitting ? "Saving..." : "Yes"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      ) : null}
     </div>
   )
 }
