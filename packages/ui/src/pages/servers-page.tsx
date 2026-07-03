@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useLocation } from "react-router-dom"
 import {
   ChevronLeft,
@@ -20,6 +20,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { startLoading, stopLoading } from "@/lib/loading-progress"
 import {
   Table,
   TableBody,
@@ -255,6 +256,8 @@ export function ServersPage() {
   const [rowsPerPage, setRowsPerPage] =
     useState<(typeof rowsPerPageOptions)[number]>(25)
   const [page, setPage] = useState(0)
+  const selectedServerIdRef = useRef<string | number | undefined>(undefined)
+  const autoSelectAttemptedRef = useRef(false)
 
 const selectedServerId = useMemo(() => {
   if (isUsableServerId(queryUser.virtualserverId)) {
@@ -267,6 +270,10 @@ const selectedServerId = useMemo(() => {
 
   return undefined
 }, [queryUser.virtualserverId, serverId])
+
+  useEffect(() => {
+    selectedServerIdRef.current = selectedServerId
+  }, [selectedServerId])
 
   const totalPages = useMemo(() => {
     if (rowsPerPage === -1) {
@@ -333,10 +340,12 @@ const selectedServerId = useMemo(() => {
     ) => {
       const hasCache = serversPageCache.loaded
 
-      setLoading(!hasCache)
+      setLoading(Boolean(options.foreground) || !hasCache)
       setError(null)
 
       try {
+        const hadExistingFlight = Boolean(serversLoadFlight)
+
         if (!serversLoadFlight) {
           serversLoadFlight = TeamSpeak.execute<ServerRow[]>(
             "serverlist",
@@ -353,7 +362,18 @@ const selectedServerId = useMemo(() => {
             })
         }
 
-        const nextServers = await serversLoadFlight
+        let wrappedExistingForeground = false
+
+        if (options.foreground && hadExistingFlight) {
+          startLoading()
+          wrappedExistingForeground = true
+        }
+
+        const nextServers = await serversLoadFlight.finally(() => {
+          if (wrappedExistingForeground) {
+            stopLoading()
+          }
+        })
 
         serversPageCache.servers = nextServers
         serversPageCache.loaded = true
@@ -361,17 +381,27 @@ const selectedServerId = useMemo(() => {
         writeServersPageCache(serversPageCache)
         setServers(nextServers)
 
-        if (options.selectFirstOnline) {
+        const shouldSelectFirstOnline =
+          options.selectFirstOnline ||
+          (!autoSelectAttemptedRef.current &&
+            !isUsableServerId(selectedServerIdRef.current))
+
+        let didSelectFirstOnline = false
+
+        if (shouldSelectFirstOnline && !isUsableServerId(selectedServerIdRef.current)) {
+          autoSelectAttemptedRef.current = true
+
           const onlineServer = nextServers.find(
             (server) => !isOffline(server.virtualserverStatus),
           )
 
           if (onlineServer) {
+            didSelectFirstOnline = true
             await selectServer(onlineServer.virtualserverId)
           }
         }
 
-        if (options.refreshQueryUser !== false && !options.selectFirstOnline) {
+        if (options.refreshQueryUser !== false && !didSelectFirstOnline) {
           void loadQueryUser().catch((queryUserError: unknown) => {
             setError(getErrorMessage(queryUserError))
           })
