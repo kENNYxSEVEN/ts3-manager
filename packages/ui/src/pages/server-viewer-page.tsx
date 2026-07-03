@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { Link } from "react-router-dom"
 import {
+  AlertCircle,
   ArrowRight,
   Ban,
   Edit,
@@ -11,6 +12,7 @@ import {
   RefreshCw,
   Trash2,
   UserRound,
+  X,
   Zap,
 } from "lucide-react"
 
@@ -19,12 +21,15 @@ import { useAuth, type QueryUser } from "@/auth/auth-context"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { startLoading, stopLoading } from "@/lib/loading-progress"
 import { cn } from "@/lib/utils"
 
 type ServerInfo = {
@@ -167,6 +172,47 @@ type SpacerDisplay = {
 }
 
 type EventPayload = Record<string, unknown>
+type ProgressMode = "foreground" | "background" | "none"
+type ClientActionType = "poke" | "kick-channel" | "kick-server"
+type ClientAction = {
+  type: ClientActionType
+  client: ClientTreeItem
+} | null
+type DeleteChannelAction = {
+  channel: ChannelTreeItem
+} | null
+
+type ErrorToast = {
+  id: number
+  message: string
+  leaving: boolean
+}
+
+const toastKeyframes = `
+@keyframes server-viewer-toast-slide-in-from-right {
+  from {
+    opacity: 0;
+    transform: translateX(calc(100% + 24px)) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes server-viewer-toast-slide-out-to-right {
+  from {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(calc(100% + 24px)) scale(0.98);
+  }
+}
+`
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) {
@@ -186,6 +232,10 @@ function getErrorMessage(error: unknown) {
 
 function valueOrDash(value: unknown) {
   return value === undefined || value === null || value === "" ? "-" : String(value)
+}
+
+function getChannelLabel(channel: ChannelRow) {
+  return formatChannelName(channel.channelName).label.trim() || channel.channelName
 }
 
 function isUsableServerId(value: string | number | undefined | null) {
@@ -428,9 +478,11 @@ function ChannelActions({
 function ClientActions({
   client,
   children,
+  onClientAction,
 }: {
   client: ClientTreeItem
   children: ReactNode
+  onClientAction: (type: ClientActionType, client: ClientTreeItem) => void
 }) {
   const clientDbId = client.clientDatabaseId ?? client.clid
 
@@ -438,7 +490,7 @@ function ClientActions({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64">
-        <DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onClientAction("poke", client)}>
           <Zap className="size-4" />
           Poke Client
         </DropdownMenuItem>
@@ -457,12 +509,12 @@ function ClientActions({
           </Link>
         </DropdownMenuItem>
 
-        <DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onClientAction("kick-channel", client)}>
           <ArrowRight className="size-4" />
           Kick Client from Channel
         </DropdownMenuItem>
 
-        <DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onClientAction("kick-server", client)}>
           <ArrowRight className="size-4" />
           Kick Client from Server
         </DropdownMenuItem>
@@ -484,11 +536,13 @@ function ClientActions({
 function ChannelTreeItem({
   item,
   depth = 0,
+  onClientAction,
   onDeleteChannel,
   onSwitchChannel,
 }: {
   item: TreeItem
   depth?: number
+  onClientAction: (type: ClientActionType, client: ClientTreeItem) => void
   onDeleteChannel: (channel: ChannelTreeItem) => void
   onSwitchChannel: (channel: ChannelTreeItem) => void
 }) {
@@ -498,7 +552,7 @@ function ChannelTreeItem({
     const away = item.clientAway === "1" || item.clientAway === 1
 
     return (
-      <ClientActions client={item}>
+      <ClientActions client={item} onClientAction={onClientAction}>
         <button
           className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-secondary/70 focus-visible:bg-secondary/70 focus-visible:outline-none"
           style={{ paddingLeft }}
@@ -547,6 +601,7 @@ function ChannelTreeItem({
           depth={depth + 1}
           item={child}
           key={child.id}
+          onClientAction={onClientAction}
           onDeleteChannel={onDeleteChannel}
           onSwitchChannel={onSwitchChannel}
         />
@@ -573,6 +628,8 @@ export function ServerViewerPage() {
   const reloadInFlightRef = useRef(false)
   const reloadQueuedRef = useRef(false)
   const queryUserRef = useRef(queryUser)
+  const errorToastIdRef = useRef(0)
+  const errorToastTimersRef = useRef<Map<number, number[]>>(new Map())
   const selectedServerKey = isUsableServerId(selectedServerId)
     ? String(selectedServerId)
     : undefined
@@ -587,7 +644,14 @@ export function ServerViewerPage() {
     () => initialCache?.clientList ?? [],
   )
   const [loading, setLoading] = useState(() => !initialCache?.loaded)
-  const [error, setError] = useState<string | null>(null)
+  const [errorToasts, setErrorToasts] = useState<ErrorToast[]>([])
+  const [clientAction, setClientAction] = useState<ClientAction>(null)
+  const [clientActionMessage, setClientActionMessage] = useState("")
+  const [dialogError, setDialogError] = useState<string | null>(null)
+  const [actionBusy, setActionBusy] = useState(false)
+  const [deleteChannelAction, setDeleteChannelAction] =
+    useState<DeleteChannelAction>(null)
+  const [forceChannelDelete, setForceChannelDelete] = useState(false)
 
   const hasMatchingCache = Boolean(
     selectedServerKey &&
@@ -603,6 +667,70 @@ export function ServerViewerPage() {
   useEffect(() => {
     queryUserRef.current = queryUser
   }, [queryUser])
+
+  const dismissErrorToast = useCallback((toastId: number) => {
+    setErrorToasts((currentToasts) =>
+      currentToasts.map((toast) =>
+        toast.id === toastId ? { ...toast, leaving: true } : toast,
+      ),
+    )
+
+    const removeTimerId = window.setTimeout(() => {
+      setErrorToasts((currentToasts) =>
+        currentToasts.filter((toast) => toast.id !== toastId),
+      )
+
+      const timerIds = errorToastTimersRef.current.get(toastId) ?? []
+
+      for (const timerId of timerIds) {
+        window.clearTimeout(timerId)
+      }
+
+      errorToastTimersRef.current.delete(toastId)
+    }, 240)
+
+    const timerIds = errorToastTimersRef.current.get(toastId) ?? []
+    errorToastTimersRef.current.set(toastId, [...timerIds, removeTimerId])
+  }, [])
+
+  const setError = useCallback(
+    (message: string | null) => {
+      if (!message) {
+        return
+      }
+
+      const toastId = errorToastIdRef.current + 1
+      errorToastIdRef.current = toastId
+
+      setErrorToasts((currentToasts) => [
+        {
+          id: toastId,
+          message,
+          leaving: false,
+        },
+        ...currentToasts,
+      ])
+
+      const leaveTimerId = window.setTimeout(() => {
+        dismissErrorToast(toastId)
+      }, 4500)
+
+      errorToastTimersRef.current.set(toastId, [leaveTimerId])
+    },
+    [dismissErrorToast],
+  )
+
+  useEffect(() => {
+    return () => {
+      for (const timerIds of errorToastTimersRef.current.values()) {
+        for (const timerId of timerIds) {
+          window.clearTimeout(timerId)
+        }
+      }
+
+      errorToastTimersRef.current.clear()
+    }
+  }, [])
 
   const loadQueryUser = useCallback(async () => {
     const userInfo = await TeamSpeak.execute<QueryUser[]>(
@@ -760,7 +888,9 @@ export function ServerViewerPage() {
     }, 250)
   }, [loadChannelTree])
 
-  const loadServerViewer = useCallback(async () => {
+  const loadServerViewer = useCallback(async (
+    options: { foreground?: boolean } = {},
+  ) => {
     if (!isUsableServerId(selectedServerId)) {
       setServerInfo({})
       setChannelList([])
@@ -787,7 +917,7 @@ export function ServerViewerPage() {
       setClientList([])
     }
 
-    setLoading(!canUseCache)
+    setLoading(Boolean(options.foreground) || !canUseCache)
     setError(null)
 
     try {
@@ -796,10 +926,12 @@ export function ServerViewerPage() {
       }
 
       let flight = serverViewerLoadFlights.get(selectedServerKey)
+      const hadExistingFlight = Boolean(flight)
 
       if (!flight) {
         flight = (async () => {
-          const progress = canUseCache ? "background" : "foreground"
+          const progress: ProgressMode =
+            options.foreground || !canUseCache ? "foreground" : "background"
           const selectedQueryUser = await ensureSelectedServer(progress)
 
           const [info, nextChannels, nextClients] = await Promise.all([
@@ -834,7 +966,18 @@ export function ServerViewerPage() {
         serverViewerLoadFlights.set(selectedServerKey, flight)
       }
 
-      const result = await flight
+      let wrappedExistingForeground = false
+
+      if (options.foreground && hadExistingFlight) {
+        startLoading()
+        wrappedExistingForeground = true
+      }
+
+      const result = await flight.finally(() => {
+        if (wrappedExistingForeground) {
+          stopLoading()
+        }
+      })
 
       setServerInfo(result.serverInfo)
       setChannelList(result.channelList)
@@ -877,6 +1020,118 @@ export function ServerViewerPage() {
     [queryUser, saveQueryUser, selectedServerKey],
   )
 
+  const removeClientLocally = useCallback(
+    (clientId: string | number) => {
+      setClientList((currentClients) => {
+        const nextClients = currentClients.filter(
+          (client) => String(client.clid) !== String(clientId),
+        )
+
+        if (selectedServerKey && serverViewerCache.serverId === selectedServerKey) {
+          serverViewerCache.clientList = nextClients
+          writeServerViewerCache(serverViewerCache)
+        }
+
+        return nextClients
+      })
+    },
+    [selectedServerKey],
+  )
+
+  const removeChannelLocally = useCallback(
+    (channelId: string | number) => {
+      setChannelList((currentChannels) => {
+        const nextChannels = currentChannels.filter(
+          (channel) => String(channel.cid) !== String(channelId),
+        )
+
+        if (selectedServerKey && serverViewerCache.serverId === selectedServerKey) {
+          serverViewerCache.channelList = nextChannels
+          writeServerViewerCache(serverViewerCache)
+        }
+
+        return nextChannels
+      })
+
+      setClientList((currentClients) => {
+        const nextClients = currentClients.filter(
+          (client) => String(client.cid) !== String(channelId),
+        )
+
+        if (selectedServerKey && serverViewerCache.serverId === selectedServerKey) {
+          serverViewerCache.clientList = nextClients
+          writeServerViewerCache(serverViewerCache)
+        }
+
+        return nextClients
+      })
+    },
+    [selectedServerKey],
+  )
+
+  const openClientAction = (type: ClientActionType, client: ClientTreeItem) => {
+    setClientAction({ type, client })
+    setClientActionMessage("")
+    setDialogError(null)
+    setError(null)
+  }
+
+  const closeClientAction = () => {
+    if (actionBusy) {
+      return
+    }
+
+    setClientAction(null)
+    setDialogError(null)
+  }
+
+  const submitClientAction = async () => {
+    if (!clientAction) {
+      return
+    }
+
+    setActionBusy(true)
+    setDialogError(null)
+    setError(null)
+
+    try {
+      await ensureSelectedServer()
+
+      if (clientAction.type === "poke") {
+        await TeamSpeak.execute("clientpoke", {
+          clid: clientAction.client.clid,
+          msg: clientActionMessage,
+        })
+      }
+
+      if (clientAction.type === "kick-channel") {
+        await TeamSpeak.execute("clientkick", {
+          clid: clientAction.client.clid,
+          reasonid: 4,
+          reasonmsg: clientActionMessage,
+        })
+        scheduleChannelTreeReload()
+      }
+
+      if (clientAction.type === "kick-server") {
+        await TeamSpeak.execute("clientkick", {
+          clid: clientAction.client.clid,
+          reasonid: 5,
+          reasonmsg: clientActionMessage,
+        })
+        removeClientLocally(clientAction.client.clid)
+        scheduleChannelTreeReload()
+      }
+
+      setClientAction(null)
+    } catch (actionError) {
+      setClientAction(null)
+      setError(getErrorMessage(actionError))
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
   const handleSwitchChannel = async (channel: ChannelTreeItem) => {
     setError(null)
 
@@ -899,18 +1154,43 @@ export function ServerViewerPage() {
     }
   }
 
-  const handleDeleteChannel = async (channel: ChannelTreeItem) => {
+  const openDeleteChannel = (channel: ChannelTreeItem) => {
+    setDeleteChannelAction({ channel })
+    setForceChannelDelete(false)
+    setDialogError(null)
     setError(null)
+  }
+
+  const closeDeleteChannel = () => {
+    if (actionBusy) {
+      return
+    }
+
+    setDeleteChannelAction(null)
+    setDialogError(null)
+  }
+
+  const confirmDeleteChannel = async () => {
+    if (!deleteChannelAction) {
+      return
+    }
+
+    setActionBusy(true)
+    setDialogError(null)
 
     try {
       await ensureSelectedServer()
       await TeamSpeak.execute("channeldelete", {
-        cid: channel.cid,
-        force: 0,
+        cid: deleteChannelAction.channel.cid,
+        force: forceChannelDelete ? 1 : 0,
       })
-      await loadChannelTree({ ensureSelection: false })
+      removeChannelLocally(deleteChannelAction.channel.cid)
+      scheduleChannelTreeReload()
+      setDeleteChannelAction(null)
     } catch (deleteError) {
-      setError(getErrorMessage(deleteError))
+      setDialogError(getErrorMessage(deleteError))
+    } finally {
+      setActionBusy(false)
     }
   }
 
@@ -1014,6 +1294,16 @@ export function ServerViewerPage() {
     }
   }, [moveClientLocally, scheduleChannelTreeReload, selectedServerId, selectedServerKey])
 
+  const clientActionTitle =
+    clientAction?.type === "poke"
+      ? "Poke"
+      : clientAction?.type === "kick-channel"
+        ? "Kick from Channel"
+        : "Kick from Server"
+  const clientActionMessageLabel =
+    clientAction?.type === "poke" ? "Poke Message" : "Kick Message"
+  const clientActionSubmitLabel = clientAction?.type === "poke" ? "Send" : "OK"
+
   if (!isUsableServerId(selectedServerId)) {
     return (
       <div className="mx-auto flex min-h-[55vh] w-full max-w-xl items-center justify-center">
@@ -1036,6 +1326,36 @@ export function ServerViewerPage() {
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-4">
+      <style>{toastKeyframes}</style>
+
+      {errorToasts.length ? (
+        <div className="fixed right-5 top-4 z-[100] flex w-[min(420px,calc(100vw-2.5rem))] flex-col gap-2 pointer-events-none">
+          {errorToasts.map((toast) => (
+            <div
+              key={toast.id}
+              className="pointer-events-auto rounded-lg border border-destructive/40 bg-destructive px-4 py-3 text-sm text-destructive-foreground shadow-lg"
+              style={{
+                animation: toast.leaving
+                  ? "server-viewer-toast-slide-out-to-right 240ms ease-in both"
+                  : "server-viewer-toast-slide-in-from-right 280ms cubic-bezier(0.16, 1, 0.3, 1) both",
+              }}
+            >
+              <div className="flex items-start gap-3">
+                <AlertCircle className="mt-0.5 size-5 shrink-0" />
+                <div className="min-w-0 flex-1 font-medium">{toast.message}</div>
+                <button
+                  className="rounded-sm opacity-80 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive-foreground/70"
+                  type="button"
+                  onClick={() => dismissErrorToast(toast.id)}
+                >
+                  <X className="size-4" />
+                  <span className="sr-only">Close</span>
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
           <div className="min-w-0">
@@ -1048,19 +1368,13 @@ export function ServerViewerPage() {
             size="sm"
             type="button"
             variant="outline"
-            onClick={() => void loadServerViewer()}
+            onClick={() => void loadServerViewer({ foreground: true })}
           >
             <RefreshCw className={cn("size-4", loading && "animate-spin")} />
             Refresh
           </Button>
         </CardHeader>
         <CardContent className="space-y-3">
-          {error ? (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
-            </div>
-          ) : null}
-
           {loading && !hasMatchingCache && channelTree.length === 0 ? (
             <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
               Loading server viewer...
@@ -1071,7 +1385,8 @@ export function ServerViewerPage() {
                 <ChannelTreeItem
                   item={item}
                   key={item.id}
-                  onDeleteChannel={(channel) => void handleDeleteChannel(channel)}
+                  onClientAction={openClientAction}
+                  onDeleteChannel={openDeleteChannel}
                   onSwitchChannel={(channel) => void handleSwitchChannel(channel)}
                 />
               ))}
@@ -1083,6 +1398,98 @@ export function ServerViewerPage() {
           )}
         </CardContent>
       </Card>
+
+      {clientAction ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm">
+          <Card className="w-full max-w-md shadow-lg">
+            <CardHeader>
+              <CardTitle>{clientActionTitle}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="client-action-message">
+                  {clientActionMessageLabel}
+                </Label>
+                <Input
+                  disabled={actionBusy}
+                  id="client-action-message"
+                  value={clientActionMessage}
+                  onChange={(event) => setClientActionMessage(event.target.value)}
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button
+                  disabled={actionBusy}
+                  type="button"
+                  variant="outline"
+                  onClick={closeClientAction}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  disabled={actionBusy}
+                  type="button"
+                  onClick={() => void submitClientAction()}
+                >
+                  {actionBusy ? "Working..." : clientActionSubmitLabel}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
+
+      {deleteChannelAction ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm">
+          <Card className="w-full max-w-md shadow-lg">
+            <CardHeader>
+              <CardTitle>Delete Channel</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Do you really want to delete this channel?
+              </p>
+              <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm font-medium">
+                {getChannelLabel(deleteChannelAction.channel)}
+              </div>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  checked={forceChannelDelete}
+                  className="size-4 accent-primary"
+                  disabled={actionBusy}
+                  type="checkbox"
+                  onChange={(event) => setForceChannelDelete(event.target.checked)}
+                />
+                Delete even if there are clients in the channel
+              </label>
+              {dialogError ? (
+                <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  {dialogError}
+                </div>
+              ) : null}
+              <div className="flex justify-end gap-2">
+                <Button
+                  disabled={actionBusy}
+                  type="button"
+                  variant="outline"
+                  onClick={closeDeleteChannel}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  disabled={actionBusy}
+                  type="button"
+                  variant="destructive"
+                  onClick={() => void confirmDeleteChannel()}
+                >
+                  {actionBusy ? "Working..." : "Delete"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      ) : null}
+
     </div>
   )
 }
