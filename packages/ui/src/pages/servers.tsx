@@ -51,7 +51,7 @@ type ServersLocationState = {
 }
 
 const rowsPerPageOptions = [25, 50, 75, -1] as const
-const SERVERS_CACHE_KEY = "ts3-manager:servers-page"
+const SERVERS_CACHE_KEY = "ts3-manager:servers"
 
 type ServersPageCache = {
   servers: ServerRow[]

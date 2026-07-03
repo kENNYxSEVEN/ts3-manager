@@ -1363,16 +1363,30 @@ export function ServerViewerPage() {
               {valueOrDash(serverInfo.virtualserverName)}
             </CardTitle>
           </div>
-          <Button
-            disabled={loading}
-            size="sm"
-            type="button"
-            variant="outline"
-            onClick={() => void loadServerViewer({ foreground: true })}
-          >
-            <RefreshCw className={cn("size-4", loading && "animate-spin")} />
-            Refresh
-          </Button>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button asChild size="sm" variant="outline">
+              <Link to="/channel/add">
+                <Plus className="size-4" />
+                Add Channel
+              </Link>
+            </Button>
+            <Button asChild size="sm" variant="outline">
+              <Link to="/spacer/add">
+                <Plus className="size-4" />
+                Add Spacer
+              </Link>
+            </Button>
+            <Button
+              disabled={loading}
+              size="sm"
+              type="button"
+              variant="outline"
+              onClick={() => void loadServerViewer({ foreground: true })}
+            >
+              <RefreshCw className={cn("size-4", loading && "animate-spin")} />
+              Refresh
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-3">
           {loading && !hasMatchingCache && channelTree.length === 0 ? (

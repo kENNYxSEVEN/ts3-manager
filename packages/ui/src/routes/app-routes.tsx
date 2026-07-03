@@ -2,11 +2,14 @@ import { Navigate, Route, Routes } from "react-router-dom"
 
 import { ProtectedRoute } from "@/auth/protected-route"
 import { AppLayout } from "@/layouts/app-layout"
-import { LoginPage } from "@/pages/login-page"
-import { LogoutPage } from "@/pages/logout-page"
-import { PlaceholderPage } from "@/pages/placeholder-page"
-import { ServerViewerPage } from "@/pages/server-viewer-page"
-import { ServersPage } from "@/pages/servers-page"
+import { ChannelForm } from "@/pages/channel-form"
+import { ClientEdit } from "@/pages/client-edit"
+import { LoginPage } from "@/pages/login"
+import { LogoutPage } from "@/pages/logout"
+import { PlaceholderPage } from "@/pages/placeholder"
+import { ServerViewerPage } from "@/pages/server-viewer"
+import { ServersPage } from "@/pages/servers"
+import { SpacerAdd } from "@/pages/spacer-add"
 import { RouteProgress } from "@/components/route-progress"
 
 type MappedRoute = {
@@ -74,9 +77,19 @@ export function AppRoutes() {
         <Route element={<AppLayout />}>
           <Route path="/servers" element={<ServersPage />} />
           <Route path="/serverviewer" element={<ServerViewerPage />} />
+          <Route path="/channel/add" element={<ChannelForm mode="add" />} />
+          <Route path="/channel/:cid/edit" element={<ChannelForm mode="edit" />} />
+          <Route path="/client/:clid/edit" element={<ClientEdit />} />
+          <Route path="/spacer/add" element={<SpacerAdd />} />
           {protectedRoutes
             .filter(
-              (route) => route.path !== "/servers" && route.path !== "/serverviewer",
+              (route) =>
+                route.path !== "/servers" &&
+                route.path !== "/serverviewer" &&
+                route.path !== "/channel/add" &&
+                route.path !== "/channel/:cid/edit" &&
+                route.path !== "/client/:clid/edit" &&
+                route.path !== "/spacer/add",
             )
             .map((route) => (
               <Route
