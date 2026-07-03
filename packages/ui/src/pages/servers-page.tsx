@@ -50,6 +50,49 @@ type ServersLocationState = {
 }
 
 const rowsPerPageOptions = [25, 50, 75, -1] as const
+const SERVERS_CACHE_KEY = "ts3-manager:servers-page"
+
+type ServersPageCache = {
+  servers: ServerRow[]
+  loaded: boolean
+  lastLoadedAt?: number
+}
+
+function readServersPageCache(): ServersPageCache {
+  try {
+    const cachedValue = window.sessionStorage.getItem(SERVERS_CACHE_KEY)
+
+    if (!cachedValue) {
+      return { servers: [], loaded: false }
+    }
+
+    const parsed = JSON.parse(cachedValue) as Partial<ServersPageCache>
+
+    if (!Array.isArray(parsed.servers)) {
+      return { servers: [], loaded: false }
+    }
+
+    return {
+      servers: parsed.servers.map(normalizeServer),
+      loaded: true,
+      lastLoadedAt: parsed.lastLoadedAt,
+    }
+  } catch {
+    return { servers: [], loaded: false }
+  }
+}
+
+function writeServersPageCache(cache: ServersPageCache) {
+  try {
+    window.sessionStorage.setItem(SERVERS_CACHE_KEY, JSON.stringify(cache))
+  } catch {
+    // Ignore storage quota/privacy mode failures; in-memory cache still works.
+  }
+}
+
+const serversPageCache: ServersPageCache = readServersPageCache()
+let serversLoadFlight: Promise<ServerRow[]> | null = null
+let serversQueryUserFlight: Promise<QueryUser> | null = null
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) {
@@ -204,20 +247,14 @@ export function ServersPage() {
   const locationState = location.state as ServersLocationState | null
   const { queryUser, serverId, saveServerId, removeServerId, saveQueryUser } =
     useAuth()
-  const [servers, setServers] = useState<ServerRow[]>([])
-  const [loading, setLoading] = useState(true)
+  const [servers, setServers] = useState<ServerRow[]>(() => serversPageCache.servers)
+  const [loading, setLoading] = useState(() => !serversPageCache.loaded)
   const [actionBusy, setActionBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null)
   const [rowsPerPage, setRowsPerPage] =
     useState<(typeof rowsPerPageOptions)[number]>(25)
   const [page, setPage] = useState(0)
-
-const firstOnlineServer = useMemo(
-  () =>
-    servers.find((server) => !isOffline(server.virtualserverStatus)),
-  [servers],
-)
 
 const selectedServerId = useMemo(() => {
   if (isUsableServerId(queryUser.virtualserverId)) {
@@ -228,8 +265,8 @@ const selectedServerId = useMemo(() => {
     return serverId
   }
 
-  return firstOnlineServer?.virtualserverId
-}, [firstOnlineServer?.virtualserverId, queryUser.virtualserverId, serverId])
+  return undefined
+}, [queryUser.virtualserverId, serverId])
 
   const totalPages = useMemo(() => {
     if (rowsPerPage === -1) {
@@ -256,8 +293,20 @@ const selectedServerId = useMemo(() => {
       : Math.min(servers.length, (page + 1) * rowsPerPage)
 
   const loadQueryUser = useCallback(async () => {
-    const userInfo = await TeamSpeak.execute<QueryUser[]>("whoami")
-    const nextQueryUser = userInfo[0] ?? {}
+    if (!serversQueryUserFlight) {
+      serversQueryUserFlight = TeamSpeak.execute<QueryUser[]>(
+        "whoami",
+        {},
+        [],
+        { progress: "background" },
+      )
+        .then((userInfo) => userInfo[0] ?? {})
+        .finally(() => {
+          serversQueryUserFlight = null
+        })
+    }
+
+    const nextQueryUser = await serversQueryUserFlight
 
     saveQueryUser(nextQueryUser)
 
@@ -274,37 +323,42 @@ const selectedServerId = useMemo(() => {
     [saveQueryUser, saveServerId],
   )
   
-  useEffect(() => {
-  const hasSelectedServer =
-    isUsableServerId(queryUser.virtualserverId) || isUsableServerId(serverId)
-
-  if (loading || actionBusy || hasSelectedServer || !firstOnlineServer) {
-    return
-  }
-
-  void selectServer(firstOnlineServer.virtualserverId).catch((selectError) => {
-    setError(getErrorMessage(selectError))
-  })
-}, [
-  actionBusy,
-  firstOnlineServer,
-  loading,
-  queryUser.virtualserverId,
-  selectServer,
-  serverId,
-])
-
   const loadServers = useCallback(
     async (
-      options: { selectFirstOnline?: boolean; refreshQueryUser?: boolean } = {},
+      options: {
+        foreground?: boolean
+        selectFirstOnline?: boolean
+        refreshQueryUser?: boolean
+      } = {},
     ) => {
-      setLoading(true)
+      const hasCache = serversPageCache.loaded
+
+      setLoading(!hasCache)
       setError(null)
 
       try {
-        const response = await TeamSpeak.execute<ServerRow[]>("serverlist")
-        const nextServers = response.map(normalizeServer)
+        if (!serversLoadFlight) {
+          serversLoadFlight = TeamSpeak.execute<ServerRow[]>(
+            "serverlist",
+            {},
+            [],
+            {
+              progress:
+                options.foreground || !hasCache ? "foreground" : "background",
+            },
+          )
+            .then((response) => response.map(normalizeServer))
+            .finally(() => {
+              serversLoadFlight = null
+            })
+        }
 
+        const nextServers = await serversLoadFlight
+
+        serversPageCache.servers = nextServers
+        serversPageCache.loaded = true
+        serversPageCache.lastLoadedAt = Date.now()
+        writeServersPageCache(serversPageCache)
         setServers(nextServers)
 
         if (options.selectFirstOnline) {
@@ -317,8 +371,10 @@ const selectedServerId = useMemo(() => {
           }
         }
 
-        if (options.refreshQueryUser !== false) {
-          await loadQueryUser()
+        if (options.refreshQueryUser !== false && !options.selectFirstOnline) {
+          void loadQueryUser().catch((queryUserError: unknown) => {
+            setError(getErrorMessage(queryUserError))
+          })
         }
       } catch (loadError) {
         setError(getErrorMessage(loadError))
@@ -339,8 +395,8 @@ const selectedServerId = useMemo(() => {
 
   useEffect(() => {
     const timerId = window.setInterval(() => {
-      setServers((currentServers) =>
-        currentServers.map((server) =>
+      setServers((currentServers) => {
+        const nextServers = currentServers.map((server) =>
           isOffline(server.virtualserverStatus)
             ? server
             : {
@@ -348,8 +404,15 @@ const selectedServerId = useMemo(() => {
                 virtualserverUptime:
                   normalizeUptime(server.virtualserverUptime) + 1,
               },
-        ),
-      )
+        )
+
+        if (serversPageCache.loaded) {
+          serversPageCache.servers = nextServers
+          writeServersPageCache(serversPageCache)
+        }
+
+        return nextServers
+      })
     }, 1000)
 
     return () => window.clearInterval(timerId)
@@ -458,7 +521,7 @@ const selectedServerId = useMemo(() => {
             disabled={loading || actionBusy}
             type="button"
             variant="outline"
-            onClick={() => void loadServers()}
+            onClick={() => void loadServers({ foreground: true })}
           >
             <RefreshCw className={cn("size-4", loading && "animate-spin")} />
             Refresh
@@ -504,7 +567,7 @@ const selectedServerId = useMemo(() => {
             </TableHeader>
 
             <TableBody>
-              {loading ? (
+              {loading && servers.length === 0 ? (
                 <TableRow className="h-20">
                   <TableCell
                     colSpan={7}

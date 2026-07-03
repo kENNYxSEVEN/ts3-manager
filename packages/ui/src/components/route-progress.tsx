@@ -1,29 +1,56 @@
-import { useEffect } from "react"
+import { useEffect, useSyncExternalStore } from "react"
 import { useLocation } from "react-router-dom"
-import NProgress from "nprogress"
 
-NProgress.configure({
-  showSpinner: false,
-  minimum: 0.15,
-  trickleSpeed: 180,
-})
+import {
+  getLoadingSnapshot,
+  startLoading,
+  stopLoading,
+  subscribeLoading,
+} from "@/lib/loading-progress"
 
 export function RouteProgress() {
   const location = useLocation()
+  const { active, progress } = useSyncExternalStore(
+    subscribeLoading,
+    getLoadingSnapshot,
+    getLoadingSnapshot,
+  )
 
   useEffect(() => {
-    NProgress.start()
-    NProgress.set(0.35)
+    let stopped = false
 
-    const timerId = window.setTimeout(() => {
-      NProgress.done()
-    }, 1200)
+    const finish = () => {
+      if (stopped) {
+        return
+      }
+
+      stopped = true
+      stopLoading()
+    }
+
+    startLoading()
+
+    const timerId = window.setTimeout(finish, 250)
 
     return () => {
       window.clearTimeout(timerId)
-      NProgress.done()
+      finish()
     }
   }, [location.pathname, location.search])
 
-  return null
+  return (
+    <div
+      aria-hidden="true"
+      className="pointer-events-none fixed inset-x-0 top-0 z-[2147483647] h-1 overflow-hidden bg-transparent"
+    >
+      <div
+        className="h-full bg-primary shadow-[0_0_12px_hsl(var(--primary))] transition-[width,opacity] duration-200 ease-out"
+        style={{
+          opacity: active ? 1 : 0,
+          width: active ? String(progress) + "%" : "0%",
+        }}
+      />
+    </div>
+  )
 }
+

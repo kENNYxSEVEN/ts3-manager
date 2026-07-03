@@ -181,8 +181,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setLoggedOut(false)
 
         const savedServerId = Cookies.get("serverId")
+        const shouldRestoreSelectedServer =
+          window.location.pathname === "/serverviewer"
 
-        if (isUsableServerId(savedServerId)) {
+        if (shouldRestoreSelectedServer && isUsableServerId(savedServerId)) {
           const validSavedServerId = savedServerId as string
           const nextQueryUser = await TeamSpeak.selectServer(validSavedServerId)
           saveServerId(validSavedServerId)

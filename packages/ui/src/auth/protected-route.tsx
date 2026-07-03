@@ -39,10 +39,11 @@ export function ProtectedRoute() {
   if (restoringSession || (token && !hasTriedRestore && !restoreFailed)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
-        Restoring session...
+        Loading...
       </div>
     )
   }
 
   return <Navigate to="/login" replace state={{ from: location }} />
 }
+

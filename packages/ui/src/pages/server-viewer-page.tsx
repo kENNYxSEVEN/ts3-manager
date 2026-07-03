@@ -67,6 +67,96 @@ type ClientTreeItem = ClientRow & {
 }
 
 type TreeItem = ChannelTreeItem | ClientTreeItem
+const SERVER_VIEWER_CACHE_PREFIX = "ts3-manager:server-viewer:"
+
+type ServerViewerLoadResult = {
+  serverInfo: ServerInfo
+  channelList: ChannelRow[]
+  clientList: ClientRow[]
+  queryUser?: QueryUser
+}
+
+type ServerViewerCache = {
+  serverId?: string
+  serverInfo: ServerInfo
+  channelList: ChannelRow[]
+  clientList: ClientRow[]
+  queryUser?: QueryUser
+  loaded: boolean
+  lastLoadedAt?: number
+}
+
+const serverViewerCache: ServerViewerCache = {
+  serverInfo: {},
+  channelList: [],
+  clientList: [],
+  loaded: false,
+}
+const serverViewerLoadFlights = new Map<string, Promise<ServerViewerLoadResult>>()
+const channelTreeLoadFlights = new Map<string, Promise<ServerViewerLoadResult>>()
+
+function readServerViewerCache(serverId: string | undefined) {
+  if (!serverId) {
+    return undefined
+  }
+
+  try {
+    const cachedValue = window.sessionStorage.getItem(
+      SERVER_VIEWER_CACHE_PREFIX + serverId,
+    )
+
+    if (!cachedValue) {
+      return undefined
+    }
+
+    const parsed = JSON.parse(cachedValue) as Partial<ServerViewerCache>
+
+    if (!Array.isArray(parsed.channelList) || !Array.isArray(parsed.clientList)) {
+      return undefined
+    }
+
+    return {
+      serverId,
+      serverInfo: parsed.serverInfo ?? {},
+      channelList: parsed.channelList,
+      clientList: parsed.clientList,
+      queryUser: parsed.queryUser,
+      loaded: true,
+      lastLoadedAt: parsed.lastLoadedAt,
+    } satisfies ServerViewerCache
+  } catch {
+    return undefined
+  }
+}
+
+function writeServerViewerCache(cache: ServerViewerCache) {
+  if (!cache.serverId) {
+    return
+  }
+
+  try {
+    window.sessionStorage.setItem(
+      SERVER_VIEWER_CACHE_PREFIX + cache.serverId,
+      JSON.stringify(cache),
+    )
+  } catch {
+    // Ignore storage quota/privacy mode failures; in-memory cache still works.
+  }
+}
+
+function getServerViewerCache(serverId: string | undefined) {
+  if (serverId && serverViewerCache.loaded && serverViewerCache.serverId === serverId) {
+    return serverViewerCache
+  }
+
+  const persistedCache = readServerViewerCache(serverId)
+
+  if (persistedCache) {
+    Object.assign(serverViewerCache, persistedCache)
+  }
+
+  return persistedCache
+}
 
 type SpacerAlignment = "left" | "center" | "right"
 
@@ -145,6 +235,26 @@ function normalizeEventId(value: unknown) {
   return undefined
 }
 
+function findRecordWithKeys(payload: unknown, keys: string[]): EventPayload | undefined {
+  if (!isRecord(payload)) {
+    return undefined
+  }
+
+  if (keys.some((key) => payload[key] !== undefined)) {
+    return payload
+  }
+
+  for (const value of Object.values(payload)) {
+    const nestedRecord = findRecordWithKeys(value, keys)
+
+    if (nestedRecord) {
+      return nestedRecord
+    }
+  }
+
+  return undefined
+}
+
 function getMovedClientId(payload: unknown) {
   return normalizeEventId(
     findPayloadValue(payload, ["clid", "clientId", "client_id"]),
@@ -155,6 +265,46 @@ function getTargetChannelId(payload: unknown) {
   return normalizeEventId(
     findPayloadValue(payload, ["ctid", "targetChannelId", "targetCid", "cid"]),
   )
+}
+
+function getConnectedClient(payload: unknown): ClientRow | undefined {
+  const clientPayload = findRecordWithKeys(payload, ["clid", "clientId"])
+
+  if (!clientPayload) {
+    return undefined
+  }
+
+  const clid = normalizeEventId(
+    findPayloadValue(clientPayload, ["clid", "clientId", "client_id"]),
+  )
+  const cid = getTargetChannelId(clientPayload)
+
+  if (clid === undefined || cid === undefined) {
+    return undefined
+  }
+
+  const nickname = findPayloadValue(clientPayload, [
+    "clientNickname",
+    "nickname",
+    "client_nickname",
+  ])
+  const clientDatabaseId = normalizeEventId(
+    findPayloadValue(clientPayload, [
+      "clientDatabaseId",
+      "clientDbid",
+      "clientDatabaseID",
+      "client_database_id",
+    ]),
+  )
+
+  return {
+    ...clientPayload,
+    clid,
+    cid,
+    clientNickname:
+      typeof nickname === "string" && nickname ? nickname : "Client " + String(clid),
+    clientDatabaseId,
+  }
 }
 
 function createNestedList(
@@ -422,19 +572,45 @@ export function ServerViewerPage() {
   const reloadTimerRef = useRef<number | null>(null)
   const reloadInFlightRef = useRef(false)
   const reloadQueuedRef = useRef(false)
-  const [serverInfo, setServerInfo] = useState<ServerInfo>({})
-  const [channelList, setChannelList] = useState<ChannelRow[]>([])
-  const [clientList, setClientList] = useState<ClientRow[]>([])
-  const [loading, setLoading] = useState(false)
+  const queryUserRef = useRef(queryUser)
+  const selectedServerKey = isUsableServerId(selectedServerId)
+    ? String(selectedServerId)
+    : undefined
+  const initialCache = getServerViewerCache(selectedServerKey)
+  const [serverInfo, setServerInfo] = useState<ServerInfo>(
+    () => initialCache?.serverInfo ?? {},
+  )
+  const [channelList, setChannelList] = useState<ChannelRow[]>(
+    () => initialCache?.channelList ?? [],
+  )
+  const [clientList, setClientList] = useState<ClientRow[]>(
+    () => initialCache?.clientList ?? [],
+  )
+  const [loading, setLoading] = useState(() => !initialCache?.loaded)
   const [error, setError] = useState<string | null>(null)
+
+  const hasMatchingCache = Boolean(
+    selectedServerKey &&
+      serverViewerCache.loaded &&
+      serverViewerCache.serverId === selectedServerKey,
+  )
 
   const channelTree = useMemo(
     () => createNestedList(mergeTreeItems(clientList, channelList)),
     [channelList, clientList],
   )
 
+  useEffect(() => {
+    queryUserRef.current = queryUser
+  }, [queryUser])
+
   const loadQueryUser = useCallback(async () => {
-    const userInfo = await TeamSpeak.execute<QueryUser[]>("whoami")
+    const userInfo = await TeamSpeak.execute<QueryUser[]>(
+      "whoami",
+      {},
+      [],
+      { progress: "background" },
+    )
     const nextQueryUser = userInfo[0] ?? {}
 
     saveQueryUser(nextQueryUser)
@@ -442,13 +618,28 @@ export function ServerViewerPage() {
     return nextQueryUser
   }, [saveQueryUser])
 
-  const ensureSelectedServer = useCallback(async () => {
+  const ensureSelectedServer = useCallback(async (
+    progress: "foreground" | "background" | "none" = "foreground",
+  ) => {
     if (!isUsableServerId(selectedServerId)) {
       throw new Error("No valid virtual server selected.")
     }
 
     const validSelectedServerId = selectedServerId as string | number
-    const nextQueryUser = await TeamSpeak.selectServer(validSelectedServerId)
+
+    const currentQueryUser = queryUserRef.current
+
+    if (
+      isUsableServerId(currentQueryUser.virtualserverId) &&
+      String(currentQueryUser.virtualserverId) === String(validSelectedServerId)
+    ) {
+      saveServerId(validSelectedServerId)
+      return currentQueryUser
+    }
+
+    const nextQueryUser = await TeamSpeak.selectServer(validSelectedServerId, {
+      progress,
+    })
 
     saveServerId(validSelectedServerId)
 
@@ -460,21 +651,84 @@ export function ServerViewerPage() {
   }, [saveQueryUser, saveServerId, selectedServerId])
 
   const loadChannelTree = useCallback(
-    async (options: { ensureSelection?: boolean } = {}) => {
-      if (options.ensureSelection !== false) {
-        await ensureSelectedServer()
+    async (
+      options: {
+        ensureSelection?: boolean
+        queryUser?: QueryUser
+        progress?: "foreground" | "background" | "none"
+      } = {},
+    ) => {
+      if (!selectedServerKey) {
+        throw new Error("No valid virtual server selected.")
       }
 
-      const [nextChannels, nextClients] = await Promise.all([
-        TeamSpeak.execute<ChannelRow[]>("channellist"),
-        TeamSpeak.execute<ClientRow[]>("clientlist", {}, ["-voice", "-away"]),
-      ])
+      const existingFlight = channelTreeLoadFlights.get(selectedServerKey)
 
-      setChannelList(nextChannels)
-      setClientList(nextClients)
-      await loadQueryUser()
+      if (existingFlight) {
+        const result = await existingFlight
+
+        setChannelList(result.channelList)
+        setClientList(result.clientList)
+
+        if (result.queryUser) {
+          saveQueryUser(result.queryUser)
+        }
+
+        return result.queryUser ?? {}
+      }
+
+      const flight = (async () => {
+        let selectedQueryUser = options.queryUser
+
+        if (options.ensureSelection !== false) {
+          selectedQueryUser = await ensureSelectedServer(
+            options.progress ?? "background",
+          )
+        }
+
+        const [nextChannels, nextClients] = await Promise.all([
+          TeamSpeak.execute<ChannelRow[]>("channellist", {}, [], {
+            progress: options.progress ?? "background",
+          }),
+          TeamSpeak.execute<ClientRow[]>("clientlist", {}, ["-voice", "-away"], {
+            progress: options.progress ?? "background",
+          }),
+        ])
+
+        const nextQueryUser = selectedQueryUser ?? (await loadQueryUser())
+
+        serverViewerCache.serverId = selectedServerKey
+        serverViewerCache.channelList = nextChannels
+        serverViewerCache.clientList = nextClients
+        serverViewerCache.queryUser = nextQueryUser
+        serverViewerCache.loaded = true
+        serverViewerCache.lastLoadedAt = Date.now()
+        writeServerViewerCache(serverViewerCache)
+
+        return {
+          serverInfo: serverViewerCache.serverInfo,
+          channelList: nextChannels,
+          clientList: nextClients,
+          queryUser: nextQueryUser,
+        }
+      })().finally(() => {
+        channelTreeLoadFlights.delete(selectedServerKey)
+      })
+
+      channelTreeLoadFlights.set(selectedServerKey, flight)
+
+      const result = await flight
+
+      setChannelList(result.channelList)
+      setClientList(result.clientList)
+
+      if (result.queryUser) {
+        saveQueryUser(result.queryUser)
+      }
+
+      return result.queryUser ?? {}
     },
-    [ensureSelectedServer, loadQueryUser],
+    [ensureSelectedServer, loadQueryUser, saveQueryUser, selectedServerKey],
   )
 
   const scheduleChannelTreeReload = useCallback(() => {
@@ -516,32 +770,102 @@ export function ServerViewerPage() {
       return
     }
 
-    setLoading(true)
+    const currentCache = getServerViewerCache(selectedServerKey)
+    const canUseCache = Boolean(currentCache?.loaded)
+
+    if (currentCache?.loaded) {
+      setServerInfo(currentCache.serverInfo)
+      setChannelList(currentCache.channelList)
+      setClientList(currentCache.clientList)
+
+      if (currentCache.queryUser) {
+        saveQueryUser(currentCache.queryUser)
+      }
+    } else {
+      setServerInfo({})
+      setChannelList([])
+      setClientList([])
+    }
+
+    setLoading(!canUseCache)
     setError(null)
 
     try {
-      await ensureSelectedServer()
+      if (!selectedServerKey) {
+        throw new Error("No valid virtual server selected.")
+      }
 
-      const info = await TeamSpeak.execute<ServerInfo[]>("serverinfo")
+      let flight = serverViewerLoadFlights.get(selectedServerKey)
 
-      setServerInfo(info[0] ?? {})
-      await loadChannelTree({ ensureSelection: false })
+      if (!flight) {
+        flight = (async () => {
+          const progress = canUseCache ? "background" : "foreground"
+          const selectedQueryUser = await ensureSelectedServer(progress)
+
+          const [info, nextChannels, nextClients] = await Promise.all([
+            TeamSpeak.execute<ServerInfo[]>("serverinfo", {}, [], { progress }),
+            TeamSpeak.execute<ChannelRow[]>("channellist", {}, [], { progress }),
+            TeamSpeak.execute<ClientRow[]>("clientlist", {}, ["-voice", "-away"], {
+              progress,
+            }),
+          ])
+
+          const nextServerInfo = info[0] ?? {}
+
+          serverViewerCache.serverId = selectedServerKey
+          serverViewerCache.serverInfo = nextServerInfo
+          serverViewerCache.channelList = nextChannels
+          serverViewerCache.clientList = nextClients
+          serverViewerCache.queryUser = selectedQueryUser
+          serverViewerCache.loaded = true
+          serverViewerCache.lastLoadedAt = Date.now()
+          writeServerViewerCache(serverViewerCache)
+
+          return {
+            serverInfo: nextServerInfo,
+            channelList: nextChannels,
+            clientList: nextClients,
+            queryUser: selectedQueryUser,
+          }
+        })().finally(() => {
+          serverViewerLoadFlights.delete(selectedServerKey)
+        })
+
+        serverViewerLoadFlights.set(selectedServerKey, flight)
+      }
+
+      const result = await flight
+
+      setServerInfo(result.serverInfo)
+      setChannelList(result.channelList)
+      setClientList(result.clientList)
+
+      if (result.queryUser) {
+        saveQueryUser(result.queryUser)
+      }
     } catch (loadError) {
       setError(getErrorMessage(loadError))
     } finally {
       setLoading(false)
     }
-  }, [ensureSelectedServer, loadChannelTree, selectedServerId])
+  }, [ensureSelectedServer, saveQueryUser, selectedServerId, selectedServerKey])
 
   const moveClientLocally = useCallback(
     (clientId: string | number, channelId: string | number) => {
-      setClientList((currentClients) =>
-        currentClients.map((client) =>
+      setClientList((currentClients) => {
+        const nextClients = currentClients.map((client) =>
           String(client.clid) === String(clientId)
             ? { ...client, cid: channelId }
             : client,
-        ),
-      )
+        )
+
+        if (selectedServerKey && serverViewerCache.serverId === selectedServerKey) {
+          serverViewerCache.clientList = nextClients
+          writeServerViewerCache(serverViewerCache)
+        }
+
+        return nextClients
+      })
 
       if (String(queryUser.clientId ?? "") === String(clientId)) {
         saveQueryUser({
@@ -550,7 +874,7 @@ export function ServerViewerPage() {
         })
       }
     },
-    [queryUser, saveQueryUser],
+    [queryUser, saveQueryUser, selectedServerKey],
   )
 
   const handleSwitchChannel = async (channel: ChannelTreeItem) => {
@@ -599,6 +923,37 @@ export function ServerViewerPage() {
       return
     }
 
+    const addClientLocally = (client: ClientRow) => {
+      setClientList((currentClients) => {
+        const withoutDuplicate = currentClients.filter(
+          (currentClient) => String(currentClient.clid) !== String(client.clid),
+        )
+        const nextClients = [...withoutDuplicate, client]
+
+        if (selectedServerKey && serverViewerCache.serverId === selectedServerKey) {
+          serverViewerCache.clientList = nextClients
+          writeServerViewerCache(serverViewerCache)
+        }
+
+        return nextClients
+      })
+    }
+
+    const removeClientLocally = (clientId: string | number) => {
+      setClientList((currentClients) => {
+        const nextClients = currentClients.filter(
+          (client) => String(client.clid) !== String(clientId),
+        )
+
+        if (selectedServerKey && serverViewerCache.serverId === selectedServerKey) {
+          serverViewerCache.clientList = nextClients
+          writeServerViewerCache(serverViewerCache)
+        }
+
+        return nextClients
+      })
+    }
+
     const handleClientMoved: EventListener = (event) => {
       const payload = getEventDetail(event)
       const movedClientId = getMovedClientId(payload)
@@ -611,13 +966,33 @@ export function ServerViewerPage() {
       scheduleChannelTreeReload()
     }
 
+    const handleClientConnect: EventListener = (event) => {
+      const connectedClient = getConnectedClient(getEventDetail(event))
+
+      if (connectedClient) {
+        addClientLocally(connectedClient)
+      }
+
+      scheduleChannelTreeReload()
+    }
+
+    const handleClientDisconnect: EventListener = (event) => {
+      const disconnectedClientId = getMovedClientId(getEventDetail(event))
+
+      if (disconnectedClientId !== undefined) {
+        removeClientLocally(disconnectedClientId)
+      }
+
+      scheduleChannelTreeReload()
+    }
+
     const handleTreeEvent: EventListener = () => {
       scheduleChannelTreeReload()
     }
 
     TeamSpeak.on("clientmoved", handleClientMoved)
-    TeamSpeak.on("clientconnect", handleTreeEvent)
-    TeamSpeak.on("clientdisconnect", handleTreeEvent)
+    TeamSpeak.on("clientconnect", handleClientConnect)
+    TeamSpeak.on("clientdisconnect", handleClientDisconnect)
     TeamSpeak.on("channelcreate", handleTreeEvent)
     TeamSpeak.on("channeledit", handleTreeEvent)
     TeamSpeak.on("channelmoved", handleTreeEvent)
@@ -630,14 +1005,14 @@ export function ServerViewerPage() {
       }
 
       TeamSpeak.off("clientmoved", handleClientMoved)
-      TeamSpeak.off("clientconnect", handleTreeEvent)
-      TeamSpeak.off("clientdisconnect", handleTreeEvent)
+      TeamSpeak.off("clientconnect", handleClientConnect)
+      TeamSpeak.off("clientdisconnect", handleClientDisconnect)
       TeamSpeak.off("channelcreate", handleTreeEvent)
       TeamSpeak.off("channeledit", handleTreeEvent)
       TeamSpeak.off("channelmoved", handleTreeEvent)
       TeamSpeak.off("channeldelete", handleTreeEvent)
     }
-  }, [moveClientLocally, scheduleChannelTreeReload, selectedServerId])
+  }, [moveClientLocally, scheduleChannelTreeReload, selectedServerId, selectedServerKey])
 
   if (!isUsableServerId(selectedServerId)) {
     return (
@@ -686,7 +1061,7 @@ export function ServerViewerPage() {
             </div>
           ) : null}
 
-          {loading ? (
+          {loading && !hasMatchingCache && channelTree.length === 0 ? (
             <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
               Loading server viewer...
             </div>

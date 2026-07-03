@@ -1,6 +1,5 @@
-import NProgress from "nprogress"
-
 import { socket } from "@/api/socket"
+import { startLoading, stopLoading } from "@/lib/loading-progress"
 
 type TeamSpeakConnectParams = {
   host: string
@@ -31,6 +30,11 @@ type TeamSpeakError = {
 }
 
 type ExecuteOptions = Record<string, unknown> | Array<unknown>
+type ProgressMode = "foreground" | "background" | "none"
+
+type RequestOptions = {
+  progress?: ProgressMode
+}
 
 type TeamSpeakEventName =
   | "textmessage"
@@ -45,6 +49,13 @@ type TeamSpeakEventName =
   | "channeldelete"
 
 const teamSpeakEvents = new EventTarget()
+let connectFlight: Promise<{ token: string }> | null = null
+const autofillFlights = new Map<string, Promise<AutofillResponse>>()
+let activeServerId: string | undefined
+let activeServerQueryUser: QueryUser | undefined
+const selectServerFlights = new Map<string, Promise<QueryUser | undefined>>()
+const registerEventsFlights = new Map<string, Promise<unknown>>()
+const registeredEventServerIds = new Set<string>()
 
 const socketEventMap: Record<string, TeamSpeakEventName> = {
   "teamspeak-textmessage": "textmessage",
@@ -59,52 +70,18 @@ const socketEventMap: Record<string, TeamSpeakEventName> = {
   "teamspeak-channeldelete": "channeldelete",
 }
 
-NProgress.configure({
-  showSpinner: false,
-  minimum: 0.12,
-  trickleSpeed: 180,
-})
-
-let pendingRequests = 0
-let progressStartedAt = 0
-
-const MIN_PROGRESS_VISIBLE_MS = 350
-
-function startProgress() {
-  pendingRequests += 1
-
-  if (pendingRequests === 1) {
-    progressStartedAt = Date.now()
-    NProgress.start()
-    return
+function withProgress<T>(
+  task: () => Promise<T>,
+  progress: ProgressMode = "foreground",
+) {
+  if (progress !== "foreground") {
+    return task()
   }
 
-  NProgress.inc()
-}
-
-function stopProgress() {
-  pendingRequests = Math.max(0, pendingRequests - 1)
-
-  if (pendingRequests > 0) {
-    NProgress.inc()
-    return
-  }
-
-  const elapsed = Date.now() - progressStartedAt
-  const delay = Math.max(0, MIN_PROGRESS_VISIBLE_MS - elapsed)
-
-  window.setTimeout(() => {
-    if (pendingRequests === 0) {
-      NProgress.done()
-    }
-  }, delay)
-}
-
-function withProgress<T>(task: () => Promise<T>) {
-  startProgress()
+  startLoading()
 
   return task().finally(() => {
-    stopProgress()
+    stopLoading()
   })
 }
 
@@ -121,6 +98,18 @@ function ensureSocketConnected() {
     socket.connect()
   }
 }
+
+function resetTeamSpeakSessionState() {
+  activeServerId = undefined
+  activeServerQueryUser = undefined
+  selectServerFlights.clear()
+  registerEventsFlights.clear()
+  registeredEventServerIds.clear()
+}
+
+socket.on("disconnect", resetTeamSpeakSessionState)
+socket.on("connect_error", resetTeamSpeakSessionState)
+socket.on("teamspeak-disconnect", resetTeamSpeakSessionState)
 
 function isErrorResponse(response: TeamSpeakError) {
   return (
@@ -150,12 +139,11 @@ function handleResponse<T>(
 }
 
 export const TeamSpeak = {
-  connect(params: TeamSpeakConnectParams) {
+  connect(params: TeamSpeakConnectParams, requestOptions: RequestOptions = {}) {
     ensureSocketConnected()
 
-    return withProgress(
-      () =>
-        new Promise<{ token: string }>((resolve, reject) => {
+    if (!connectFlight) {
+      connectFlight = new Promise<{ token: string }>((resolve, reject) => {
           socket.emit(
             "teamspeak-connect",
             params,
@@ -168,16 +156,22 @@ export const TeamSpeak = {
               reject(response)
             },
           )
-        }),
-    )
+        }).finally(() => {
+          connectFlight = null
+          resetTeamSpeakSessionState()
+        })
+    }
+
+    return withProgress(() => connectFlight as Promise<{ token: string }>, requestOptions.progress)
   },
 
-  autofillForm(token: string) {
+  autofillForm(token: string, requestOptions: RequestOptions = {}) {
     ensureSocketConnected()
 
-    return withProgress(
-      () =>
-        new Promise<AutofillResponse>((resolve, reject) => {
+    let flight = autofillFlights.get(token)
+
+    if (!flight) {
+      flight = new Promise<AutofillResponse>((resolve, reject) => {
           socket.emit("autofillform", token, (response: AutofillResponse) => {
             if (response.host) {
               resolve(response)
@@ -186,14 +180,21 @@ export const TeamSpeak = {
 
             reject(response)
           })
-        }),
-    )
+        }).finally(() => {
+          autofillFlights.delete(token)
+        })
+
+      autofillFlights.set(token, flight)
+    }
+
+    return withProgress(() => flight, requestOptions.progress)
   },
 
   execute<T = unknown[]>(
     command: string,
     params: Record<string, unknown> = {},
     options: ExecuteOptions = [],
+    requestOptions: RequestOptions = {},
   ) {
     ensureSocketConnected()
 
@@ -211,31 +212,83 @@ export const TeamSpeak = {
               handleResponse<T>(response, resolve, reject),
           )
         }),
+      requestOptions.progress,
     )
   },
 
-  registerEvents() {
+  registerEvents(
+    requestOptions: RequestOptions = {},
+    serverId: string | number | undefined = activeServerId,
+  ) {
     ensureSocketConnected()
+    const key = serverId === undefined ? "__instance__" : String(serverId)
 
-    return withProgress(
-      () =>
-        new Promise<unknown>((resolve, reject) => {
+    if (registeredEventServerIds.has(key)) {
+      return Promise.resolve(undefined)
+    }
+
+    const existingFlight = registerEventsFlights.get(key)
+
+    if (existingFlight) {
+      return withProgress(() => existingFlight, requestOptions.progress)
+    }
+
+    const flight = new Promise<unknown>((resolve, reject) => {
           socket.emit(
             "teamspeak-registerevents",
             (response: TeamSpeakError | unknown) =>
               handleResponse(response, resolve, reject),
           )
-        }),
-    )
+        })
+      .then((response) => {
+        registeredEventServerIds.add(key)
+        return response
+      })
+      .finally(() => {
+        registerEventsFlights.delete(key)
+      })
+
+    registerEventsFlights.set(key, flight)
+
+    return withProgress(() => flight, requestOptions.progress)
   },
 
-  async selectServer(sid: string | number) {
-    await TeamSpeak.execute("use", { sid })
-    await TeamSpeak.registerEvents()
+  async selectServer(sid: string | number, requestOptions: RequestOptions = {}) {
+    const key = String(sid)
 
-    const userInfo = await TeamSpeak.execute<QueryUser[]>("whoami")
+    if (activeServerId === key && activeServerQueryUser) {
+      return activeServerQueryUser
+    }
 
-    return userInfo[0]
+    const existingFlight = selectServerFlights.get(key)
+
+    if (existingFlight) {
+      return withProgress(() => existingFlight, requestOptions.progress)
+    }
+
+    const flight = (async () => {
+      await TeamSpeak.execute("use", { sid }, [], { progress: "none" })
+      activeServerId = key
+
+      await TeamSpeak.registerEvents({ progress: "none" }, key)
+
+      const userInfo = await TeamSpeak.execute<QueryUser[]>(
+        "whoami",
+        {},
+        [],
+        { progress: "none" },
+      )
+
+      activeServerQueryUser = userInfo[0]
+
+      return activeServerQueryUser
+    })().finally(() => {
+      selectServerFlights.delete(key)
+    })
+
+    selectServerFlights.set(key, flight)
+
+    return withProgress(() => flight, requestOptions.progress)
   },
 
   on(name: TeamSpeakEventName, listener: EventListener) {
