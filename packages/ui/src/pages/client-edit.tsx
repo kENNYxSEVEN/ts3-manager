@@ -4,7 +4,7 @@ import { ChevronDown } from "lucide-react"
 
 import { TeamSpeak } from "@/api/teamspeak"
 import { useAuth } from "@/auth/auth-context"
-import { ErrorToastStack, useErrorToastStack } from "@/components/error-toast-stack"
+import { ToastStack, useToastStack } from "@/components/toast-stack"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -86,7 +86,6 @@ function canSelectGroup(group: ServerGroup, defaultServerGroupId?: string | numb
 
   return Number(group.type) !== 2
 }
-
 
 function FloatingTextarea({
   disabled,
@@ -307,7 +306,7 @@ export function ClientEdit() {
   const { clid } = useParams()
   const { queryUser, saveQueryUser, saveServerId, serverId } = useAuth()
   const queryUserRef = useRef(queryUser)
-  const { dismissToast, showError, toasts } = useErrorToastStack()
+  const { dismissToast, showError, showSuccess, toasts } = useToastStack()
   const [client, setClient] = useState<ClientInfo>({})
   const [servergroups, setServergroups] = useState<ServerGroup[]>([])
   const [defaultServerGroupId, setDefaultServerGroupId] =
@@ -526,7 +525,7 @@ export function ClientEdit() {
     try {
       await saveClient()
       await refreshInitialState()
-      navigate(-1)
+      showSuccess("Client updated")
     } catch (submitError) {
       showError(getErrorMessage(submitError))
     } finally {
@@ -538,7 +537,7 @@ export function ClientEdit() {
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-4">
-      <ErrorToastStack toasts={toasts} onDismiss={dismissToast} />
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
       <Card className="overflow-visible">
         <CardHeader>

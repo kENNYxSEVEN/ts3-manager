@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { Link } from "react-router-dom"
 import {
-  AlertCircle,
   ArrowRight,
   Ban,
   Edit,
@@ -12,12 +11,12 @@ import {
   RefreshCw,
   Trash2,
   UserRound,
-  X,
   Zap,
 } from "lucide-react"
 
 import { TeamSpeak } from "@/api/teamspeak"
 import { useAuth, type QueryUser } from "@/auth/auth-context"
+import { ToastStack, useToastStack } from "@/components/toast-stack"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -181,38 +180,6 @@ type ClientAction = {
 type DeleteChannelAction = {
   channel: ChannelTreeItem
 } | null
-
-type ErrorToast = {
-  id: number
-  message: string
-  leaving: boolean
-}
-
-const toastKeyframes = `
-@keyframes server-viewer-toast-slide-in-from-right {
-  from {
-    opacity: 0;
-    transform: translateX(calc(100% + 24px)) scale(0.98);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateX(0) scale(1);
-  }
-}
-
-@keyframes server-viewer-toast-slide-out-to-right {
-  from {
-    opacity: 1;
-    transform: translateX(0) scale(1);
-  }
-
-  to {
-    opacity: 0;
-    transform: translateX(calc(100% + 24px)) scale(0.98);
-  }
-}
-`
 
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) {
@@ -628,8 +595,7 @@ export function ServerViewerPage() {
   const reloadInFlightRef = useRef(false)
   const reloadQueuedRef = useRef(false)
   const queryUserRef = useRef(queryUser)
-  const errorToastIdRef = useRef(0)
-  const errorToastTimersRef = useRef<Map<number, number[]>>(new Map())
+  const { dismissToast, showError, toasts } = useToastStack()
   const selectedServerKey = isUsableServerId(selectedServerId)
     ? String(selectedServerId)
     : undefined
@@ -644,7 +610,6 @@ export function ServerViewerPage() {
     () => initialCache?.clientList ?? [],
   )
   const [loading, setLoading] = useState(() => !initialCache?.loaded)
-  const [errorToasts, setErrorToasts] = useState<ErrorToast[]>([])
   const [clientAction, setClientAction] = useState<ClientAction>(null)
   const [clientActionMessage, setClientActionMessage] = useState("")
   const [dialogError, setDialogError] = useState<string | null>(null)
@@ -668,69 +633,12 @@ export function ServerViewerPage() {
     queryUserRef.current = queryUser
   }, [queryUser])
 
-  const dismissErrorToast = useCallback((toastId: number) => {
-    setErrorToasts((currentToasts) =>
-      currentToasts.map((toast) =>
-        toast.id === toastId ? { ...toast, leaving: true } : toast,
-      ),
-    )
-
-    const removeTimerId = window.setTimeout(() => {
-      setErrorToasts((currentToasts) =>
-        currentToasts.filter((toast) => toast.id !== toastId),
-      )
-
-      const timerIds = errorToastTimersRef.current.get(toastId) ?? []
-
-      for (const timerId of timerIds) {
-        window.clearTimeout(timerId)
-      }
-
-      errorToastTimersRef.current.delete(toastId)
-    }, 240)
-
-    const timerIds = errorToastTimersRef.current.get(toastId) ?? []
-    errorToastTimersRef.current.set(toastId, [...timerIds, removeTimerId])
-  }, [])
-
   const setError = useCallback(
     (message: string | null) => {
-      if (!message) {
-        return
-      }
-
-      const toastId = errorToastIdRef.current + 1
-      errorToastIdRef.current = toastId
-
-      setErrorToasts((currentToasts) => [
-        {
-          id: toastId,
-          message,
-          leaving: false,
-        },
-        ...currentToasts,
-      ])
-
-      const leaveTimerId = window.setTimeout(() => {
-        dismissErrorToast(toastId)
-      }, 4500)
-
-      errorToastTimersRef.current.set(toastId, [leaveTimerId])
+      showError(message)
     },
-    [dismissErrorToast],
+    [showError],
   )
-
-  useEffect(() => {
-    return () => {
-      for (const timerIds of errorToastTimersRef.current.values()) {
-        for (const timerId of timerIds) {
-          window.clearTimeout(timerId)
-        }
-      }
-
-      errorToastTimersRef.current.clear()
-    }
-  }, [])
 
   const loadQueryUser = useCallback(async () => {
     const userInfo = await TeamSpeak.execute<QueryUser[]>(
@@ -1326,36 +1234,8 @@ export function ServerViewerPage() {
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-4">
-      <style>{toastKeyframes}</style>
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
-      {errorToasts.length ? (
-        <div className="fixed right-5 top-4 z-[100] flex w-[min(420px,calc(100vw-2.5rem))] flex-col gap-2 pointer-events-none">
-          {errorToasts.map((toast) => (
-            <div
-              key={toast.id}
-              className="pointer-events-auto rounded-lg border border-destructive/40 bg-destructive px-4 py-3 text-sm text-destructive-foreground shadow-lg"
-              style={{
-                animation: toast.leaving
-                  ? "server-viewer-toast-slide-out-to-right 240ms ease-in both"
-                  : "server-viewer-toast-slide-in-from-right 280ms cubic-bezier(0.16, 1, 0.3, 1) both",
-              }}
-            >
-              <div className="flex items-start gap-3">
-                <AlertCircle className="mt-0.5 size-5 shrink-0" />
-                <div className="min-w-0 flex-1 font-medium">{toast.message}</div>
-                <button
-                  className="rounded-sm opacity-80 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-destructive-foreground/70"
-                  type="button"
-                  onClick={() => dismissErrorToast(toast.id)}
-                >
-                  <X className="size-4" />
-                  <span className="sr-only">Close</span>
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : null}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
           <div className="min-w-0">

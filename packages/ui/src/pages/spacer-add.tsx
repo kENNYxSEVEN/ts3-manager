@@ -11,7 +11,7 @@ import { ChevronDown } from "lucide-react"
 
 import { TeamSpeak } from "@/api/teamspeak"
 import { useAuth } from "@/auth/auth-context"
-import { ErrorToastStack, useErrorToastStack } from "@/components/error-toast-stack"
+import { ToastStack, useToastStack } from "@/components/toast-stack"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -387,7 +387,7 @@ export function SpacerAdd() {
   const navigate = useNavigate()
   const { queryUser, saveQueryUser, saveServerId, serverId } = useAuth()
   const queryUserRef = useRef(queryUser)
-  const { dismissToast, showError, toasts } = useErrorToastStack()
+  const { dismissToast, showError, toasts } = useToastStack()
   const [form, setForm] = useState(defaultForm)
   const [channels, setChannels] = useState<ChannelRow[]>([])
   const [serverInfo, setServerInfo] = useState<ServerInfo>({})
@@ -510,11 +510,6 @@ export function SpacerAdd() {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
 
-    if (!form.specialSpacer && !form.spacerText.trim()) {
-      showError("Spacer text or special spacer is required.")
-      return
-    }
-
     setSubmitting(true)
 
     try {
@@ -532,7 +527,7 @@ export function SpacerAdd() {
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-4">
-      <ErrorToastStack toasts={toasts} onDismiss={dismissToast} />
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
       <Card>
         <CardHeader>

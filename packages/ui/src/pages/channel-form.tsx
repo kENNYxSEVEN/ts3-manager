@@ -11,7 +11,7 @@ import { ChevronDown } from "lucide-react"
 
 import { TeamSpeak } from "@/api/teamspeak"
 import { useAuth } from "@/auth/auth-context"
-import { ErrorToastStack, useErrorToastStack } from "@/components/error-toast-stack"
+import { ToastStack, useToastStack } from "@/components/toast-stack"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -375,7 +375,7 @@ export function ChannelForm({ mode }: ChannelFormProps) {
   const [searchParams] = useSearchParams()
   const { queryUser, saveQueryUser, saveServerId, serverId } = useAuth()
   const queryUserRef = useRef(queryUser)
-  const { dismissToast, showError, toasts } = useErrorToastStack()
+  const { dismissToast, showError, toasts } = useToastStack()
   const cid = params.cid
   const requestedParentId = searchParams.get("pid") ?? "0"
   const [parentChannelId, setParentChannelId] = useState(requestedParentId)
@@ -634,7 +634,7 @@ export function ChannelForm({ mode }: ChannelFormProps) {
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-4">
-      <ErrorToastStack toasts={toasts} onDismiss={dismissToast} />
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
       <Card>
         <CardHeader>
