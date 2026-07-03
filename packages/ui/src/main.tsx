@@ -5,6 +5,7 @@ import { BrowserRouter } from "react-router-dom"
 import App from "./App"
 import { AuthProvider } from "./auth/auth-context"
 import "./index.css"
+import "@/styles/nprogress.css"
 import { ThemeProvider } from "./theme/theme-provider"
 
 createRoot(document.getElementById("root")!).render(

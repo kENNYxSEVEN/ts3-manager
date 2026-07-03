@@ -5,7 +5,9 @@ import { AppLayout } from "@/layouts/app-layout"
 import { LoginPage } from "@/pages/login-page"
 import { LogoutPage } from "@/pages/logout-page"
 import { PlaceholderPage } from "@/pages/placeholder-page"
+import { ServerViewerPage } from "@/pages/server-viewer-page"
 import { ServersPage } from "@/pages/servers-page"
+import { RouteProgress } from "@/components/route-progress"
 
 type MappedRoute = {
   path: string
@@ -62,6 +64,8 @@ const protectedRoutes: MappedRoute[] = [
 
 export function AppRoutes() {
   return (
+    <>
+    <RouteProgress />
     <Routes>
       <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<LoginPage />} />
@@ -69,8 +73,11 @@ export function AppRoutes() {
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
           <Route path="/servers" element={<ServersPage />} />
+          <Route path="/serverviewer" element={<ServerViewerPage />} />
           {protectedRoutes
-            .filter((route) => route.path !== "/servers")
+            .filter(
+              (route) => route.path !== "/servers" && route.path !== "/serverviewer",
+            )
             .map((route) => (
               <Route
                 key={route.path}
@@ -84,5 +91,6 @@ export function AppRoutes() {
 
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
+    </>
   )
 }

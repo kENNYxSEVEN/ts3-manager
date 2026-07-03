@@ -5,11 +5,13 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react"
 import { useNavigate } from "react-router-dom"
 
+import { TeamSpeak } from "@/api/teamspeak"
 import { socket } from "@/api/socket"
 
 export type QueryUser = {
@@ -30,6 +32,9 @@ type AuthContextValue = {
   connected: boolean
   loggedOut: boolean
   rememberLogin: boolean
+  restoringSession: boolean
+  hasTriedRestore: boolean
+  restoreSession: () => Promise<boolean>
   saveToken: (token: string) => void
   removeToken: () => void
   saveServerId: (serverId: string | number) => void
@@ -48,8 +53,18 @@ type AuthProviderProps = {
   children: ReactNode
 }
 
+function isUsableServerId(value: string | number | undefined | null) {
+  return (
+    value !== undefined &&
+    value !== null &&
+    String(value) !== "" &&
+    String(value) !== "0"
+  )
+}
+
 export function AuthProvider({ children }: AuthProviderProps) {
   const navigate = useNavigate()
+  const restorePromiseRef = useRef<Promise<boolean> | null>(null)
   const [token, setToken] = useState<string | undefined>(() => Cookies.get("token"))
   const [serverId, setServerId] = useState<string | undefined>(() =>
     Cookies.get("serverId"),
@@ -58,6 +73,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [connected, setConnected] = useState(false)
   const [loggedOut, setLoggedOut] = useState(true)
   const [rememberLogin, setRememberLogin] = useState(true)
+  const [restoringSession, setRestoringSession] = useState(false)
+  const [hasTriedRestore, setHasTriedRestore] = useState(false)
 
   const cookieOptions = useMemo(
     () => ({ expires: rememberLogin ? 365 : undefined }),
@@ -119,9 +136,82 @@ export function AuthProvider({ children }: AuthProviderProps) {
     setConnected(false)
     setLoggedOut(true)
     setQueryUser({})
+    setHasTriedRestore(false)
+    restorePromiseRef.current = null
     removeServerId()
     removeToken()
   }, [removeServerId, removeToken])
+
+  const restoreSession = useCallback(() => {
+    if (connected) {
+      return Promise.resolve(true)
+    }
+
+    if (restorePromiseRef.current) {
+      return restorePromiseRef.current
+    }
+
+    const currentToken = token ?? Cookies.get("token")
+
+    if (!currentToken) {
+      setHasTriedRestore(true)
+      return Promise.resolve(false)
+    }
+
+    setRestoringSession(true)
+
+    const promise = (async () => {
+      try {
+        const form = await TeamSpeak.autofillForm(currentToken)
+
+        if (!form.host || !form.username || !form.password) {
+          throw new Error("Stored session is incomplete.")
+        }
+
+        const connectResponse = await TeamSpeak.connect({
+          host: form.host,
+          queryport: Number(form.queryport ?? 10022),
+          protocol: form.protocol === "raw" ? "raw" : "ssh",
+          username: form.username,
+          password: form.password,
+        })
+
+        saveToken(connectResponse.token || currentToken)
+        setConnected(true)
+        setLoggedOut(false)
+
+        const savedServerId = Cookies.get("serverId")
+
+        if (isUsableServerId(savedServerId)) {
+          const validSavedServerId = savedServerId as string
+          const nextQueryUser = await TeamSpeak.selectServer(validSavedServerId)
+          saveServerId(validSavedServerId)
+
+          if (nextQueryUser) {
+            saveQueryUser(nextQueryUser)
+          }
+        }
+
+        setHasTriedRestore(true)
+        return true
+      } catch {
+        setConnected(false)
+        setLoggedOut(true)
+        setQueryUser({})
+        removeServerId()
+        removeToken()
+        setHasTriedRestore(true)
+        return false
+      } finally {
+        setRestoringSession(false)
+        restorePromiseRef.current = null
+      }
+    })()
+
+    restorePromiseRef.current = promise
+
+    return promise
+  }, [connected, removeServerId, removeToken, saveQueryUser, saveServerId, saveToken, token])
 
   useEffect(() => {
     const redirectToLogin = () => {
@@ -153,6 +243,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       connected,
       loggedOut,
       rememberLogin,
+      restoringSession,
+      hasTriedRestore,
+      restoreSession,
       saveToken,
       removeToken,
       saveServerId,
@@ -171,6 +264,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       connected,
       loggedOut,
       rememberLogin,
+      restoringSession,
+      hasTriedRestore,
+      restoreSession,
       saveToken,
       removeToken,
       saveServerId,

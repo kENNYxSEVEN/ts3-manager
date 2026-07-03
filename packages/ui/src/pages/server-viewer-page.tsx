@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { Link } from "react-router-dom"
 import {
   ArrowRight,
@@ -76,6 +76,8 @@ type SpacerDisplay = {
   alignment: SpacerAlignment
 }
 
+type EventPayload = Record<string, unknown>
+
 function getErrorMessage(error: unknown) {
   if (error instanceof Error) {
     return error.message
@@ -102,6 +104,56 @@ function isUsableServerId(value: string | number | undefined | null) {
     value !== null &&
     String(value) !== "" &&
     String(value) !== "0"
+  )
+}
+
+function getEventDetail(event: Event) {
+  return event instanceof CustomEvent ? event.detail : undefined
+}
+
+function isRecord(value: unknown): value is EventPayload {
+  return typeof value === "object" && value !== null
+}
+
+function findPayloadValue(payload: unknown, keys: string[]): unknown {
+  if (!isRecord(payload)) {
+    return undefined
+  }
+
+  for (const key of keys) {
+    if (payload[key] !== undefined) {
+      return payload[key]
+    }
+  }
+
+  for (const value of Object.values(payload)) {
+    const nestedValue = findPayloadValue(value, keys)
+
+    if (nestedValue !== undefined) {
+      return nestedValue
+    }
+  }
+
+  return undefined
+}
+
+function normalizeEventId(value: unknown) {
+  if (typeof value === "string" || typeof value === "number") {
+    return value
+  }
+
+  return undefined
+}
+
+function getMovedClientId(payload: unknown) {
+  return normalizeEventId(
+    findPayloadValue(payload, ["clid", "clientId", "client_id"]),
+  )
+}
+
+function getTargetChannelId(payload: unknown) {
+  return normalizeEventId(
+    findPayloadValue(payload, ["ctid", "targetChannelId", "targetCid", "cid"]),
   )
 }
 
@@ -367,6 +419,9 @@ export function ServerViewerPage() {
     return undefined
   }, [queryUser.virtualserverId, serverId])
 
+  const reloadTimerRef = useRef<number | null>(null)
+  const reloadInFlightRef = useRef(false)
+  const reloadQueuedRef = useRef(false)
   const [serverInfo, setServerInfo] = useState<ServerInfo>({})
   const [channelList, setChannelList] = useState<ChannelRow[]>([])
   const [clientList, setClientList] = useState<ClientRow[]>([])
@@ -422,6 +477,35 @@ export function ServerViewerPage() {
     [ensureSelectedServer, loadQueryUser],
   )
 
+  const scheduleChannelTreeReload = useCallback(() => {
+    if (reloadTimerRef.current !== null) {
+      window.clearTimeout(reloadTimerRef.current)
+    }
+
+    reloadTimerRef.current = window.setTimeout(() => {
+      reloadTimerRef.current = null
+
+      if (reloadInFlightRef.current) {
+        reloadQueuedRef.current = true
+        return
+      }
+
+      reloadInFlightRef.current = true
+      void loadChannelTree()
+        .catch((treeError: unknown) => {
+          setError(getErrorMessage(treeError))
+        })
+        .finally(() => {
+          reloadInFlightRef.current = false
+
+          if (reloadQueuedRef.current) {
+            reloadQueuedRef.current = false
+            scheduleChannelTreeReload()
+          }
+        })
+    }, 250)
+  }, [loadChannelTree])
+
   const loadServerViewer = useCallback(async () => {
     if (!isUsableServerId(selectedServerId)) {
       setServerInfo({})
@@ -449,8 +533,34 @@ export function ServerViewerPage() {
     }
   }, [ensureSelectedServer, loadChannelTree, selectedServerId])
 
+  const moveClientLocally = useCallback(
+    (clientId: string | number, channelId: string | number) => {
+      setClientList((currentClients) =>
+        currentClients.map((client) =>
+          String(client.clid) === String(clientId)
+            ? { ...client, cid: channelId }
+            : client,
+        ),
+      )
+
+      if (String(queryUser.clientId ?? "") === String(clientId)) {
+        saveQueryUser({
+          ...queryUser,
+          clientChannelId: channelId,
+        })
+      }
+    },
+    [queryUser, saveQueryUser],
+  )
+
   const handleSwitchChannel = async (channel: ChannelTreeItem) => {
     setError(null)
+
+    const currentClientId = normalizeEventId(queryUser.clientId)
+
+    if (currentClientId) {
+      moveClientLocally(currentClientId, channel.cid)
+    }
 
     try {
       await ensureSelectedServer()
@@ -458,9 +568,10 @@ export function ServerViewerPage() {
         clid: queryUser.clientId,
         cid: channel.cid,
       })
-      await loadChannelTree({ ensureSelection: false })
+      scheduleChannelTreeReload()
     } catch (switchError) {
       setError(getErrorMessage(switchError))
+      scheduleChannelTreeReload()
     }
   }
 
@@ -488,13 +599,23 @@ export function ServerViewerPage() {
       return
     }
 
-    const handleTreeEvent: EventListener = () => {
-      void loadChannelTree().catch((treeError: unknown) => {
-        setError(getErrorMessage(treeError))
-      })
+    const handleClientMoved: EventListener = (event) => {
+      const payload = getEventDetail(event)
+      const movedClientId = getMovedClientId(payload)
+      const targetChannelId = getTargetChannelId(payload)
+
+      if (movedClientId !== undefined && targetChannelId !== undefined) {
+        moveClientLocally(movedClientId, targetChannelId)
+      }
+
+      scheduleChannelTreeReload()
     }
 
-    TeamSpeak.on("clientmoved", handleTreeEvent)
+    const handleTreeEvent: EventListener = () => {
+      scheduleChannelTreeReload()
+    }
+
+    TeamSpeak.on("clientmoved", handleClientMoved)
     TeamSpeak.on("clientconnect", handleTreeEvent)
     TeamSpeak.on("clientdisconnect", handleTreeEvent)
     TeamSpeak.on("channelcreate", handleTreeEvent)
@@ -503,7 +624,12 @@ export function ServerViewerPage() {
     TeamSpeak.on("channeldelete", handleTreeEvent)
 
     return () => {
-      TeamSpeak.off("clientmoved", handleTreeEvent)
+      if (reloadTimerRef.current !== null) {
+        window.clearTimeout(reloadTimerRef.current)
+        reloadTimerRef.current = null
+      }
+
+      TeamSpeak.off("clientmoved", handleClientMoved)
       TeamSpeak.off("clientconnect", handleTreeEvent)
       TeamSpeak.off("clientdisconnect", handleTreeEvent)
       TeamSpeak.off("channelcreate", handleTreeEvent)
@@ -511,7 +637,7 @@ export function ServerViewerPage() {
       TeamSpeak.off("channelmoved", handleTreeEvent)
       TeamSpeak.off("channeldelete", handleTreeEvent)
     }
-  }, [loadChannelTree, selectedServerId])
+  }, [moveClientLocally, scheduleChannelTreeReload, selectedServerId])
 
   if (!isUsableServerId(selectedServerId)) {
     return (
