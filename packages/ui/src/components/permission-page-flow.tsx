@@ -4,14 +4,23 @@ import {
   useRef,
   useState,
   type MouseEvent,
-  type ReactNode,
 } from "react"
 import { createPortal } from "react-dom"
-import { ChevronLeft, ChevronRight, MoreVertical } from "lucide-react"
+import { ChevronDown, ChevronLeft, ChevronRight, MoreVertical } from "lucide-react"
 
+import { AppModal } from "@/components/app-modal"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import {
   Table,
@@ -45,9 +54,15 @@ type SelectorOption = {
   value: string
 }
 
-type PermissionSelector = {
+type SelectorGroup = {
   label: string
   options: SelectorOption[]
+}
+
+type PermissionSelector = {
+  groups?: SelectorGroup[]
+  label: string
+  options?: SelectorOption[]
   value: string
   onChange: (value: string) => void
 }
@@ -327,21 +342,29 @@ export function PermissionPageFlow({
                   : "minmax(220px, 320px) minmax(220px, 1fr) auto",
             }}
           >
-            {selectors.map((selector) => (
-              <select
-                className="flex h-9 min-h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={busy}
-                key={selector.label}
-                value={selector.value}
-                onChange={(event) => selector.onChange(event.target.value)}
-              >
-                {selector.options.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            ))}
+            {selectors.map((selector) =>
+              selector.groups ? (
+                <GroupedPermissionSelector
+                  disabled={busy}
+                  key={selector.label}
+                  selector={selector}
+                />
+              ) : (
+                <select
+                  className="flex h-9 min-h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                  disabled={busy}
+                  key={selector.label}
+                  value={selector.value}
+                  onChange={(event) => selector.onChange(event.target.value)}
+                >
+                  {(selector.options ?? []).map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              ),
+            )}
 
             <Input
               className="h-9 min-h-9"
@@ -546,123 +569,164 @@ export function PermissionPageFlow({
           )
         : null}
 
-      {editingPermission ? (
-        <PermissionModal>
-          <Card className="w-full max-w-lg">
-            <CardHeader>
-              <CardTitle>{getPermissionTitle(editingPermission)}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-8">
-              {editableFields.includes("permvalue") ? (
-                <div className="space-y-1">
-                  <div className="text-xs font-semibold text-muted-foreground">
-                    Value
-                  </div>
-                  <input
-                    className="h-9 w-full border-b border-border bg-transparent px-0 text-sm outline-none transition-colors focus:border-primary disabled:cursor-not-allowed disabled:opacity-60"
+      <AppModal
+        open={Boolean(editingPermission)}
+        preventClose={submitting}
+        title={editingPermission ? getPermissionTitle(editingPermission) : null}
+        footer={
+          <>
+            <Button
+              disabled={submitting}
+              type="button"
+              onClick={() => void saveEditingPermission()}
+            >
+              SAVE
+            </Button>
+            <Button
+              disabled={submitting}
+              type="button"
+              variant="outline"
+              onClick={() => setEditingPermission(null)}
+            >
+              CANCEL
+            </Button>
+          </>
+        }
+        onClose={() => setEditingPermission(null)}
+      >
+        <div className="space-y-8">
+          {editableFields.includes("permvalue") ? (
+            <div className="space-y-1">
+              <div className="text-xs font-semibold text-muted-foreground">
+                Value
+              </div>
+              <input
+                className="h-9 w-full border-b border-border bg-transparent px-0 text-sm outline-none transition-colors focus:border-primary disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={submitting}
+                type="number"
+                value={editedValue}
+                onChange={(event) => setEditedValue(event.target.value)}
+              />
+            </div>
+          ) : null}
+
+          {supportsSkip || supportsNegated ? (
+            <div className="flex flex-wrap items-center gap-6">
+              {supportsSkip ? (
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={editedSkip}
                     disabled={submitting}
-                    type="number"
-                    value={editedValue}
-                    onChange={(event) => setEditedValue(event.target.value)}
+                    onCheckedChange={(checked) =>
+                      setEditedSkip(checked === true)
+                    }
                   />
-                </div>
+                  Skip
+                </label>
               ) : null}
 
-              {supportsSkip || supportsNegated ? (
-                <div className="flex flex-wrap items-center gap-6">
-                  {supportsSkip ? (
-                    <label className="flex items-center gap-2 text-sm">
-                      <Checkbox
-                        checked={editedSkip}
-                        disabled={submitting}
-                        onCheckedChange={(checked) =>
-                          setEditedSkip(checked === true)
-                        }
-                      />
-                      Skip
-                    </label>
-                  ) : null}
-
-                  {supportsNegated ? (
-                    <label className="flex items-center gap-2 text-sm">
-                      <Checkbox
-                        checked={editedNegated}
-                        disabled={submitting}
-                        onCheckedChange={(checked) =>
-                          setEditedNegated(checked === true)
-                        }
-                      />
-                      Negated
-                    </label>
-                  ) : null}
-                </div>
+              {supportsNegated ? (
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={editedNegated}
+                    disabled={submitting}
+                    onCheckedChange={(checked) =>
+                      setEditedNegated(checked === true)
+                    }
+                  />
+                  Negated
+                </label>
               ) : null}
+            </div>
+          ) : null}
+        </div>
+      </AppModal>
 
-              <div className="flex justify-end gap-2">
-                <Button
-                  disabled={submitting}
-                  type="button"
-                  onClick={() => void saveEditingPermission()}
-                >
-                  Save
-                </Button>
-                <Button
-                  disabled={submitting}
-                  type="button"
-                  variant="outline"
-                  onClick={() => setEditingPermission(null)}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </PermissionModal>
-      ) : null}
-
-      {deletePermission ? (
-        <PermissionModal>
-          <Card className="w-full max-w-lg">
-            <CardHeader>
-              <CardTitle>Remove Permission</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-8">
-              <p className="text-sm leading-6 text-muted-foreground">
-                Do you really want to remove the{" "}
-                <span className="font-semibold text-foreground">
-                  {deletePermission.permname}
-                </span>{" "}
-                permission values?
-              </p>
-              <div className="flex justify-end gap-2">
-                <Button
-                  disabled={submitting}
-                  type="button"
-                  onClick={() => void removeSelectedPermission()}
-                >
-                  Yes
-                </Button>
-                <Button
-                  disabled={submitting}
-                  type="button"
-                  variant="outline"
-                  onClick={() => setDeletePermission(null)}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </PermissionModal>
-      ) : null}
+      <AppModal
+        open={Boolean(deletePermission)}
+        preventClose={submitting}
+        title="Remove Permission"
+        footer={
+          <>
+            <Button
+              disabled={submitting}
+              type="button"
+              onClick={() => void removeSelectedPermission()}
+            >
+              YES
+            </Button>
+            <Button
+              disabled={submitting}
+              type="button"
+              variant="outline"
+              onClick={() => setDeletePermission(null)}
+            >
+              CANCEL
+            </Button>
+          </>
+        }
+        onClose={() => setDeletePermission(null)}
+      >
+        <p className="text-sm leading-6 text-muted-foreground">
+          Do you really want to remove the{" "}
+          <span className="font-semibold text-foreground">
+            {deletePermission?.permname}
+          </span>{" "}
+          permission values?
+        </p>
+      </AppModal>
     </div>
   )
 }
 
-function PermissionModal({ children }: { children: ReactNode }) {
+function GroupedPermissionSelector({
+  disabled,
+  selector,
+}: {
+  disabled: boolean
+  selector: PermissionSelector
+}) {
+  const selectedOption = selector.groups
+    ?.flatMap((group) => group.options)
+    .find((option) => option.value === selector.value)
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4">
-      {children}
-    </div>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          className="h-9 min-h-9 w-full justify-between px-3 text-left font-normal"
+          disabled={disabled}
+          type="button"
+          variant="outline"
+        >
+          <span className="truncate">
+            {selectedOption?.label ?? selector.label}
+          </span>
+          <ChevronDown className="ml-2 size-4 shrink-0 opacity-60" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="max-h-80 min-w-[var(--radix-dropdown-menu-trigger-width)]">
+        <DropdownMenuRadioGroup
+          value={selector.value}
+          onValueChange={selector.onChange}
+        >
+          {selector.groups?.map((group, groupIndex) => (
+            <div key={group.label}>
+              {groupIndex > 0 ? <DropdownMenuSeparator /> : null}
+              <DropdownMenuLabel>{group.label}</DropdownMenuLabel>
+              {group.options.map((option) => (
+                <DropdownMenuRadioItem
+                  className="cursor-pointer px-2 py-1.5"
+                  key={option.value}
+                  value={option.value}
+                >
+                  {option.label}
+                </DropdownMenuRadioItem>
+              ))}
+            </div>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
