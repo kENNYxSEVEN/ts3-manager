@@ -3,6 +3,8 @@ import { Navigate, Route, Routes } from "react-router-dom"
 import { ProtectedRoute } from "@/auth/protected-route"
 import { AppLayout } from "@/layouts/app-layout"
 import { ChannelForm } from "@/pages/channel-form"
+import { ChannelClientPermissions } from "@/pages/channel-client-permissions"
+import { ChannelGroupPermissions } from "@/pages/channel-group-permissions"
 import { ChannelPermissions } from "@/pages/channel-permissions"
 import { Chat } from "@/pages/chat"
 import { ClientBan } from "@/pages/client-ban"
@@ -12,6 +14,7 @@ import { LoginPage } from "@/pages/login"
 import { LogoutPage } from "@/pages/logout"
 import { PlaceholderPage } from "@/pages/placeholder"
 import { ServerViewerPage } from "@/pages/server-viewer"
+import { ServerGroupPermissions } from "@/pages/server-group-permissions"
 import { ServersPage } from "@/pages/servers"
 import { SpacerAdd } from "@/pages/spacer-add"
 import { RouteProgress } from "@/components/route-progress"
@@ -90,8 +93,14 @@ export function AppRoutes() {
           <Route path="/spacer/add" element={<SpacerAdd />} />
           <Route path="/permissions/client" element={<ClientPermissions />} />
           <Route path="/permissions/client/:cldbid" element={<ClientPermissions />} />
+          <Route path="/permissions/servergroup" element={<ServerGroupPermissions />} />
+          <Route path="/permissions/servergroup/:sgid" element={<ServerGroupPermissions />} />
           <Route path="/permissions/channel" element={<ChannelPermissions />} />
           <Route path="/permissions/channel/:cid" element={<ChannelPermissions />} />
+          <Route path="/permissions/channel/client" element={<ChannelClientPermissions />} />
+          <Route path="/permissions/channel/:cid/client/:cldbid" element={<ChannelClientPermissions />} />
+          <Route path="/permissions/channelgroup" element={<ChannelGroupPermissions />} />
+          <Route path="/permissions/channelgroup/:cgid" element={<ChannelGroupPermissions />} />
           {protectedRoutes
             .filter(
               (route) =>
@@ -106,8 +115,14 @@ export function AppRoutes() {
                 route.path !== "/spacer/add" &&
                 route.path !== "/permissions/client" &&
                 route.path !== "/permissions/client/:cldbid" &&
+                route.path !== "/permissions/servergroup" &&
+                route.path !== "/permissions/servergroup/:sgid" &&
                 route.path !== "/permissions/channel" &&
-                route.path !== "/permissions/channel/:cid",
+                route.path !== "/permissions/channel/:cid" &&
+                route.path !== "/permissions/channel/client" &&
+                route.path !== "/permissions/channel/:cid/client/:cldbid" &&
+                route.path !== "/permissions/channelgroup" &&
+                route.path !== "/permissions/channelgroup/:cgid"
             )
             .map((route) => (
               <Route
