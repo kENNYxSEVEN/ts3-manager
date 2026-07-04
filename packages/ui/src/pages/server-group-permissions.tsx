@@ -13,6 +13,7 @@ import { ChevronLeft, ChevronRight, MoreVertical } from "lucide-react"
 import { TeamSpeak } from "@/api/teamspeak"
 import { useAuth } from "@/auth/auth-context"
 import { AppModal } from "@/components/app-modal"
+import { AppSelect } from "@/components/app-select"
 import { ToastStack, useToastStack } from "@/components/toast-stack"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -465,6 +466,23 @@ export function ServerGroupPermissions() {
     initialLoading &&
     availablePermissions.length === 0 &&
     grantedPermissions.length === 0
+  const groupOptions = useMemo(() => {
+    const hasSelectedGroup = groups.some(
+      (group) => String(group.sgid) === String(sgid),
+    )
+    const selectedGroupFallback =
+      sgid && !hasSelectedGroup
+        ? [{ label: `Group ${sgid}`, value: String(sgid) }]
+        : []
+
+    return [
+      ...selectedGroupFallback,
+      ...groups.map((group) => ({
+        label: `${group.name} (${group.sgid})`,
+        value: String(group.sgid),
+      })),
+    ]
+  }, [groups, sgid])
 
   const startEdit = (permission: Permission) => {
     setActionPermission(null)
@@ -571,20 +589,14 @@ export function ServerGroupPermissions() {
         </CardHeader>
         <CardContent>
           <div className="mb-4 grid gap-3 md:grid-cols-[minmax(0,1.5fr)_minmax(180px,1fr)_auto]">
-            <select
-              className="h-10 rounded-md border bg-background px-3 text-sm outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            <AppSelect
+              className="h-10"
               disabled={busy || groups.length === 0}
+              options={groupOptions}
+              placeholder="Server Group"
               value={sgid ?? ""}
-              onChange={(event) =>
-                navigate("/permissions/servergroup/" + event.target.value)
-              }
-            >
-              {groups.map((group) => (
-                <option key={String(group.sgid)} value={String(group.sgid)}>
-                  {group.name} ({group.sgid})
-                </option>
-              ))}
-            </select>
+              onChange={(value) => navigate("/permissions/servergroup/" + value)}
+            />
 
             <Input
               className="h-10"
@@ -688,26 +700,24 @@ export function ServerGroupPermissions() {
               <div className="flex items-center justify-end gap-6 border-t px-4 py-3 text-sm text-muted-foreground">
                 <div className="flex items-center gap-3">
                   <span>Rows per page:</span>
-                  <select
-                    className="h-8 border-b bg-transparent px-2 text-foreground outline-none disabled:cursor-not-allowed disabled:opacity-50"
+                  <AppSelect
+                    className="h-8 min-h-8 w-20 border-transparent bg-transparent px-2 shadow-none hover:border-border"
                     disabled={busy}
                     value={String(rowsPerPage)}
-                    onChange={(event) => {
+                    options={rowsPerPageOptions.map((option) => ({
+                      label: option === "all" ? "All" : String(option),
+                      value: String(option),
+                    }))}
+                    onChange={(value) => {
                       const nextValue =
-                        event.target.value === "all"
+                        value === "all"
                           ? "all"
-                          : Number(event.target.value)
+                          : Number(value)
 
                       setRowsPerPage(nextValue as RowsPerPage)
                       setPage(0)
                     }}
-                  >
-                    {rowsPerPageOptions.map((option) => (
-                      <option key={String(option)} value={String(option)}>
-                        {option === "all" ? "All" : option}
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
 
                 <div className="min-w-24 text-right text-foreground">

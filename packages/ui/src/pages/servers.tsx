@@ -13,6 +13,7 @@ import {
 import { TeamSpeak } from "@/api/teamspeak"
 import { useAuth, type QueryUser } from "@/auth/auth-context"
 import { AppModal } from "@/components/app-modal"
+import { AppSelect } from "@/components/app-select"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import {
@@ -708,20 +709,18 @@ const selectedServerId = useMemo(() => {
           <div className="flex min-h-14 items-center justify-end gap-8 border-t px-4 text-xs text-muted-foreground">
             <div className="flex items-center gap-3">
               <span>Rows per page:</span>
-              <select
-                className="h-8 rounded-md border border-transparent bg-transparent px-2 text-foreground outline-none hover:border-border focus:border-border"
-                value={rowsPerPage}
-                onChange={(event) => {
-                  setRowsPerPage(Number(event.target.value) as typeof rowsPerPage)
+              <AppSelect
+                className="h-8 min-h-8 w-20 border-transparent bg-transparent px-2 shadow-none hover:border-border"
+                value={String(rowsPerPage)}
+                options={rowsPerPageOptions.map((option) => ({
+                  label: option === -1 ? "All" : String(option),
+                  value: String(option),
+                }))}
+                onChange={(value) => {
+                  setRowsPerPage(Number(value) as typeof rowsPerPage)
                   setPage(0)
                 }}
-              >
-                {rowsPerPageOptions.map((option) => (
-                  <option key={option} value={option}>
-                    {option === -1 ? "All" : option}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
 
             <span>

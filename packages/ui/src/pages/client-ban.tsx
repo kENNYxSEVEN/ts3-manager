@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom"
 
 import { TeamSpeak } from "@/api/teamspeak"
 import { useAuth } from "@/auth/auth-context"
+import { AppSelect } from "@/components/app-select"
 import { ToastStack, useToastStack } from "@/components/toast-stack"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -312,19 +313,14 @@ export function ClientBan() {
 
                 <div className="space-y-2">
                   <Label htmlFor="banUnit">Unit</Label>
-                  <select
-                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none transition-colors focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+                  <AppSelect
+                    className="h-9"
                     disabled={busy}
-                    id="banUnit"
+                    options={timeUnits}
+                    placeholder="Unit"
                     value={form.unit}
-                    onChange={(event) => updateForm("unit", event.target.value)}
-                  >
-                    {timeUnits.map((unit) => (
-                      <option key={unit.value} value={unit.value}>
-                        {unit.label}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(value) => updateForm("unit", value)}
+                  />
                 </div>
               </div>
 
