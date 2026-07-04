@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom"
 import { ProtectedRoute } from "@/auth/protected-route"
 import { AppLayout } from "@/layouts/app-layout"
 import { ChannelForm } from "@/pages/channel-form"
+import { ChannelPermissions } from "@/pages/channel-permissions"
 import { Chat } from "@/pages/chat"
 import { ClientBan } from "@/pages/client-ban"
 import { ClientEdit } from "@/pages/client-edit"
@@ -86,6 +87,8 @@ export function AppRoutes() {
           <Route path="/client/:cldbid/ban" element={<ClientBan />} />
           <Route path="/client/:clid/edit" element={<ClientEdit />} />
           <Route path="/spacer/add" element={<SpacerAdd />} />
+          <Route path="/permissions/channel" element={<ChannelPermissions />} />
+          <Route path="/permissions/channel/:cid" element={<ChannelPermissions />} />
           {protectedRoutes
             .filter(
               (route) =>
@@ -97,7 +100,9 @@ export function AppRoutes() {
                 route.path !== "/channel/:cid/edit" &&
                 route.path !== "/client/:cldbid/ban" &&
                 route.path !== "/client/:clid/edit" &&
-                route.path !== "/spacer/add",
+                route.path !== "/spacer/add" &&
+                route.path !== "/permissions/channel" &&
+                route.path !== "/permissions/channel/:cid",
             )
             .map((route) => (
               <Route
