@@ -12,6 +12,7 @@ import { ChevronLeft, ChevronRight, MoreVertical } from "lucide-react"
 
 import { TeamSpeak } from "@/api/teamspeak"
 import { useAuth } from "@/auth/auth-context"
+import { AppModal } from "@/components/app-modal"
 import { ToastStack, useToastStack } from "@/components/toast-stack"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -801,83 +802,78 @@ export function ChannelPermissions() {
           )
         : null}
 
-      {editingPermission ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4">
-          <Card className="w-full max-w-lg">
-            <CardHeader>
-              <CardTitle>{getPermissionTitle(editingPermission)}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-8">
-              <div className="space-y-1">
-                <div className="text-xs font-semibold text-muted-foreground">
-                  Value
-                </div>
-                <input
-                  className="h-9 w-full border-b border-border bg-transparent px-0 text-sm outline-none transition-colors focus:border-primary disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={submitting}
-                  type="number"
-                  value={editedValue}
-                  onChange={(event) => setEditedValue(event.target.value)}
-                />
-              </div>
-
-              <div className="flex justify-end gap-2">
-                <Button
-                  disabled={submitting}
-                  type="button"
-                  onClick={() => void savePermission()}
-                >
-                  Save
-                </Button>
-                <Button
-                  disabled={submitting}
-                  type="button"
-                  variant="outline"
-                  onClick={() => setEditingPermission(null)}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+      <AppModal
+        open={Boolean(editingPermission)}
+        preventClose={submitting}
+        title={editingPermission ? getPermissionTitle(editingPermission) : null}
+        footer={
+          <>
+            <Button
+              disabled={submitting}
+              type="button"
+              onClick={() => void savePermission()}
+            >
+              Save
+            </Button>
+            <Button
+              disabled={submitting}
+              type="button"
+              variant="outline"
+              onClick={() => setEditingPermission(null)}
+            >
+              Cancel
+            </Button>
+          </>
+        }
+        onClose={() => setEditingPermission(null)}
+      >
+        <div className="space-y-1">
+          <div className="text-xs font-semibold text-muted-foreground">
+            Value
+          </div>
+          <input
+            className="h-9 w-full border-b border-border bg-transparent px-0 text-sm outline-none transition-colors focus:border-primary disabled:cursor-not-allowed disabled:opacity-60"
+            disabled={submitting}
+            type="number"
+            value={editedValue}
+            onChange={(event) => setEditedValue(event.target.value)}
+          />
         </div>
-      ) : null}
+      </AppModal>
 
-      {deletePermission ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4">
-          <Card className="w-full max-w-lg">
-            <CardHeader>
-              <CardTitle>Remove Permission</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-8">
-              <p className="text-sm leading-6 text-muted-foreground">
-                Do you really want to remove the{" "}
-                <span className="font-semibold text-foreground">
-                  {deletePermission.permname}
-                </span>{" "}
-                permission values?
-              </p>
-              <div className="flex justify-end gap-2">
-                <Button
-                  disabled={submitting}
-                  type="button"
-                  onClick={() => void removePermission()}
-                >
-                  Yes
-                </Button>
-                <Button
-                  disabled={submitting}
-                  type="button"
-                  variant="outline"
-                  onClick={() => setDeletePermission(null)}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      ) : null}
+      <AppModal
+        open={Boolean(deletePermission)}
+        preventClose={submitting}
+        title="Remove Permission"
+        footer={
+          <>
+            <Button
+              disabled={submitting}
+              type="button"
+              onClick={() => void removePermission()}
+            >
+              Yes
+            </Button>
+            <Button
+              disabled={submitting}
+              type="button"
+              variant="outline"
+              onClick={() => setDeletePermission(null)}
+            >
+              Cancel
+            </Button>
+          </>
+        }
+        onClose={() => setDeletePermission(null)}
+      >
+        <p className="text-sm leading-6 text-muted-foreground">
+          Do you really want to remove the{" "}
+          <span className="font-semibold text-foreground">
+            {deletePermission?.permname}
+          </span>{" "}
+          permission values?
+        </p>
+      </AppModal>
     </div>
   )
 }

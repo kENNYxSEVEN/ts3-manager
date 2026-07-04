@@ -16,6 +16,7 @@ import {
 
 import { TeamSpeak } from "@/api/teamspeak"
 import { useAuth, type QueryUser } from "@/auth/auth-context"
+import { AppModal } from "@/components/app-modal"
 import { ToastStack, useToastStack } from "@/components/toast-stack"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -1306,96 +1307,96 @@ export function ServerViewerPage() {
         </CardContent>
       </Card>
 
-      {clientAction ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4">
-          <Card className="w-full max-w-md shadow-lg">
-            <CardHeader>
-              <CardTitle>{clientActionTitle}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="client-action-message">
-                  {clientActionMessageLabel}
-                </Label>
-                <Input
-                  disabled={actionBusy}
-                  id="client-action-message"
-                  value={clientActionMessage}
-                  onChange={(event) => setClientActionMessage(event.target.value)}
-                />
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button
-                  disabled={actionBusy}
-                  type="button"
-                  variant="outline"
-                  onClick={closeClientAction}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  disabled={actionBusy}
-                  type="button"
-                  onClick={() => void submitClientAction()}
-                >
-                  {actionBusy ? "Working..." : clientActionSubmitLabel}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+      <AppModal
+        open={Boolean(clientAction)}
+        preventClose={actionBusy}
+        title={clientActionTitle}
+        footer={
+          <>
+            <Button
+              disabled={actionBusy}
+              type="button"
+              variant="outline"
+              onClick={closeClientAction}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={actionBusy}
+              type="button"
+              onClick={() => void submitClientAction()}
+            >
+              {actionBusy ? "Working..." : clientActionSubmitLabel}
+            </Button>
+          </>
+        }
+        onClose={closeClientAction}
+      >
+        <div className="space-y-2">
+          <Label htmlFor="client-action-message">
+            {clientActionMessageLabel}
+          </Label>
+          <Input
+            disabled={actionBusy}
+            id="client-action-message"
+            value={clientActionMessage}
+            onChange={(event) => setClientActionMessage(event.target.value)}
+          />
         </div>
-      ) : null}
+      </AppModal>
 
-      {deleteChannelAction ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4">
-          <Card className="w-full max-w-md shadow-lg">
-            <CardHeader>
-              <CardTitle>Delete Channel</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Do you really want to delete this channel?
-              </p>
-              <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm font-medium">
-                {getChannelLabel(deleteChannelAction.channel)}
-              </div>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  checked={forceChannelDelete}
-                  className="size-4 accent-primary"
-                  disabled={actionBusy}
-                  type="checkbox"
-                  onChange={(event) => setForceChannelDelete(event.target.checked)}
-                />
-                Delete even if there are clients in the channel
-              </label>
-              {dialogError ? (
-                <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                  {dialogError}
-                </div>
-              ) : null}
-              <div className="flex justify-end gap-2">
-                <Button
-                  disabled={actionBusy}
-                  type="button"
-                  variant="outline"
-                  onClick={closeDeleteChannel}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  disabled={actionBusy}
-                  type="button"
-                  variant="destructive"
-                  onClick={() => void confirmDeleteChannel()}
-                >
-                  {actionBusy ? "Working..." : "Delete"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+      <AppModal
+        open={Boolean(deleteChannelAction)}
+        preventClose={actionBusy}
+        title="Delete Channel"
+        footer={
+          <>
+            <Button
+              disabled={actionBusy}
+              type="button"
+              variant="outline"
+              onClick={closeDeleteChannel}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={actionBusy}
+              type="button"
+              variant="destructive"
+              onClick={() => void confirmDeleteChannel()}
+            >
+              {actionBusy ? "Working..." : "Delete"}
+            </Button>
+          </>
+        }
+        onClose={closeDeleteChannel}
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Do you really want to delete this channel?
+          </p>
+          {deleteChannelAction ? (
+            <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm font-medium">
+              {getChannelLabel(deleteChannelAction.channel)}
+            </div>
+          ) : null}
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              checked={forceChannelDelete}
+              className="size-4 accent-primary"
+              disabled={actionBusy}
+              type="checkbox"
+              onChange={(event) => setForceChannelDelete(event.target.checked)}
+            />
+            Delete even if there are clients in the channel
+          </label>
+          {dialogError ? (
+            <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {dialogError}
+            </div>
+          ) : null}
         </div>
-      ) : null}
+      </AppModal>
 
     </div>
   )

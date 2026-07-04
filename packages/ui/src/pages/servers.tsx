@@ -12,8 +12,9 @@ import {
 
 import { TeamSpeak } from "@/api/teamspeak"
 import { useAuth, type QueryUser } from "@/auth/auth-context"
+import { AppModal } from "@/components/app-modal"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -172,41 +173,43 @@ function ConfirmDialog({
   const isStop = action.type === "stop"
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4">
-      <Card className="w-full max-w-md shadow-lg">
-        <CardHeader>
-          <CardTitle>{isStop ? "Stop Server" : "Delete Server"}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">
-            {isStop
-              ? "Do really want to stop this virtual server instance?"
-              : "Do really want to delete this virtual server instance?"}
-          </p>
-          <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm font-medium">
-            {action.server.virtualserverName}
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button
-              disabled={busy}
-              type="button"
-              variant="outline"
-              onClick={onCancel}
-            >
-              Cancel
-            </Button>
-            <Button
-              disabled={busy}
-              type="button"
-              variant={isStop ? "default" : "destructive"}
-              onClick={onConfirm}
-            >
-              {busy ? "Working..." : isStop ? "Stop" : "Delete"}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+    <AppModal
+      open={Boolean(action)}
+      preventClose={busy}
+      title={isStop ? "Stop Server" : "Delete Server"}
+      footer={
+        <>
+          <Button
+            disabled={busy}
+            type="button"
+            variant="outline"
+            onClick={onCancel}
+          >
+            Cancel
+          </Button>
+          <Button
+            disabled={busy}
+            type="button"
+            variant={isStop ? "default" : "destructive"}
+            onClick={onConfirm}
+          >
+            {busy ? "Working..." : isStop ? "Stop" : "Delete"}
+          </Button>
+        </>
+      }
+      onClose={onCancel}
+    >
+      <div className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          {isStop
+            ? "Do really want to stop this virtual server instance?"
+            : "Do really want to delete this virtual server instance?"}
+        </p>
+        <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm font-medium">
+          {action.server.virtualserverName}
+        </div>
+      </div>
+    </AppModal>
   )
 }
 

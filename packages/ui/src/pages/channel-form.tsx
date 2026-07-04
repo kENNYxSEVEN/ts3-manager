@@ -11,6 +11,7 @@ import { ChevronDown } from "lucide-react"
 
 import { TeamSpeak } from "@/api/teamspeak"
 import { useAuth } from "@/auth/auth-context"
+import { AppModal } from "@/components/app-modal"
 import { ToastStack, useToastStack } from "@/components/toast-stack"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -847,38 +848,36 @@ export function ChannelForm({ mode }: ChannelFormProps) {
         </CardContent>
       </Card>
 
-      {temporaryWarning ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4">
-          <Card className="w-full max-w-md shadow-lg">
-            <CardHeader>
-              <CardTitle>Temporary Channel</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                If there are no clients inside the channel and you change it to
-                temporary, the channel will be deleted. Do you want to continue?
-              </p>
-              <div className="flex justify-end gap-2">
-                <Button
-                  disabled={submitting}
-                  type="button"
-                  variant="outline"
-                  onClick={() => setTemporaryWarning(false)}
-                >
-                  No
-                </Button>
-                <Button
-                  disabled={submitting}
-                  type="button"
-                  onClick={() => void confirmTemporarySave()}
-                >
-                  {submitting ? "Saving..." : "Yes"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      ) : null}
+      <AppModal
+        open={temporaryWarning}
+        preventClose={submitting}
+        title="Temporary Channel"
+        footer={
+          <>
+            <Button
+              disabled={submitting}
+              type="button"
+              variant="outline"
+              onClick={() => setTemporaryWarning(false)}
+            >
+              No
+            </Button>
+            <Button
+              disabled={submitting}
+              type="button"
+              onClick={() => void confirmTemporarySave()}
+            >
+              {submitting ? "Saving..." : "Yes"}
+            </Button>
+          </>
+        }
+        onClose={() => setTemporaryWarning(false)}
+      >
+        <p className="text-sm text-muted-foreground">
+          If there are no clients inside the channel and you change it to
+          temporary, the channel will be deleted. Do you want to continue?
+        </p>
+      </AppModal>
     </div>
   )
 }
