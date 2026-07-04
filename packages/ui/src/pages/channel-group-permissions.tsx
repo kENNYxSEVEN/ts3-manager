@@ -42,6 +42,13 @@ function isUsableServerId(value: string | number | undefined | null) {
   )
 }
 
+function toChannelGroupOption(group: ChannelGroup) {
+  return {
+    label: `${group.name} (${group.cgid})`,
+    value: String(group.cgid),
+  }
+}
+
 export function ChannelGroupPermissions() {
   const navigate = useNavigate()
   const { cgid } = useParams()
@@ -283,6 +290,27 @@ export function ChannelGroupPermissions() {
     }
   }
 
+  const groupedChannelGroupOptions = [
+    {
+      label: "Regular Groups",
+      options: groups
+        .filter((group) => Number(group.type) === 1)
+        .map(toChannelGroupOption),
+    },
+    {
+      label: "Template Groups",
+      options: groups
+        .filter((group) => Number(group.type) === 0)
+        .map(toChannelGroupOption),
+    },
+    {
+      label: "ServerQuery Groups",
+      options: groups
+        .filter((group) => Number(group.type) === 2)
+        .map(toChannelGroupOption),
+    },
+  ]
+
   return (
     <>
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
@@ -302,11 +330,8 @@ export function ChannelGroupPermissions() {
         }
         selectors={[
           {
+            groups: groupedChannelGroupOptions,
             label: "Channel Group",
-            options: groups.map((group) => ({
-              label: `${group.name} (${group.cgid})`,
-              value: String(group.cgid),
-            })),
             value: cgid ?? "",
             onChange: (value) => navigate("/permissions/channelgroup/" + value),
           },
