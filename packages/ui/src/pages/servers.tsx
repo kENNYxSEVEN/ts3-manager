@@ -172,7 +172,7 @@ function ConfirmDialog({
   const isStop = action.type === "stop"
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4">
       <Card className="w-full max-w-md shadow-lg">
         <CardHeader>
           <CardTitle>{isStop ? "Stop Server" : "Delete Server"}</CardTitle>

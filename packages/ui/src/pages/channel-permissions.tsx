@@ -732,7 +732,7 @@ export function ChannelPermissions() {
         : null}
 
       {editingPermission ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4">
           <Card className="w-full max-w-lg">
             <CardHeader>
               <CardTitle>{getPermissionTitle(editingPermission)}</CardTitle>
@@ -751,24 +751,21 @@ export function ChannelPermissions() {
                 />
               </div>
 
-              <div className="flex justify-end gap-6">
+              <div className="flex justify-end gap-2">
                 <Button
-                  className="px-0 font-semibold uppercase text-primary hover:text-primary"
                   disabled={submitting}
                   type="button"
-                  variant="ghost"
                   onClick={() => void savePermission()}
                 >
-                  SAVE
+                  Save
                 </Button>
                 <Button
-                  className="px-0 font-semibold uppercase text-primary hover:text-primary"
                   disabled={submitting}
                   type="button"
-                  variant="ghost"
+                  variant="outline"
                   onClick={() => setEditingPermission(null)}
                 >
-                  CANCEL
+                  Cancel
                 </Button>
               </div>
             </CardContent>
@@ -777,7 +774,7 @@ export function ChannelPermissions() {
       ) : null}
 
       {deletePermission ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4">
           <Card className="w-full max-w-lg">
             <CardHeader>
               <CardTitle>Remove Permission</CardTitle>
@@ -790,24 +787,21 @@ export function ChannelPermissions() {
                 </span>{" "}
                 permission values?
               </p>
-              <div className="flex justify-end gap-6">
+              <div className="flex justify-end gap-2">
                 <Button
-                  className="px-0 font-semibold uppercase text-primary hover:text-primary"
                   disabled={submitting}
                   type="button"
-                  variant="ghost"
                   onClick={() => void removePermission()}
                 >
-                  YES
+                  Yes
                 </Button>
                 <Button
-                  className="px-0 font-semibold uppercase text-primary hover:text-primary"
                   disabled={submitting}
                   type="button"
-                  variant="ghost"
+                  variant="outline"
                   onClick={() => setDeletePermission(null)}
                 >
-                  CANCEL
+                  Cancel
                 </Button>
               </div>
             </CardContent>

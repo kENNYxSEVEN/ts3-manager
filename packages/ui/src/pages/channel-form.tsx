@@ -848,7 +848,7 @@ export function ChannelForm({ mode }: ChannelFormProps) {
       </Card>
 
       {temporaryWarning ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4">
           <Card className="w-full max-w-md shadow-lg">
             <CardHeader>
               <CardTitle>Temporary Channel</CardTitle>
