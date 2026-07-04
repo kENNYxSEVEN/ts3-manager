@@ -21,6 +21,7 @@ import { ToastStack, useToastStack } from "@/components/toast-stack"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -1381,12 +1382,12 @@ export function ServerViewerPage() {
             </div>
           ) : null}
           <label className="flex items-center gap-2 text-sm">
-            <input
+            <Checkbox
               checked={forceChannelDelete}
-              className="size-4 accent-primary"
               disabled={actionBusy}
-              type="checkbox"
-              onChange={(event) => setForceChannelDelete(event.target.checked)}
+              onCheckedChange={(checked) =>
+                setForceChannelDelete(checked === true)
+              }
             />
             Delete even if there are clients in the channel
           </label>

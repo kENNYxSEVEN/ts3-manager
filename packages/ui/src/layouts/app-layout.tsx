@@ -7,9 +7,9 @@ import {
   ChevronRight,
   ClipboardList,
   Code2,
-  Database,
+  Server,
   Eye,
-  FileArchive,
+  CloudBackup,
   FileKey2,
   Folder,
   KeyRound,
@@ -18,6 +18,7 @@ import {
   MonitorCog,
   ShieldCheck,
   TerminalSquare,
+  User,
   Users,
   type LucideIcon,
 } from "lucide-react"
@@ -36,32 +37,32 @@ type NavItem = {
 }
 
 const mainNavigation: NavItem[] = [
-  { title: "Server List", path: "/servers", icon: Database },
+  { title: "Server List", path: "/servers", icon: Server },
   { title: "Server Viewer", path: "/serverviewer", icon: Eye },
   { title: "Chat", path: "/chat", icon: MessageSquare },
   { title: "File Browser", path: "/files", icon: Folder },
   { title: "Server Log", path: "/logs", icon: ClipboardList },
-  { title: "Backup/Restore", path: "/snapshot", icon: FileArchive },
+  { title: "Backup/Restore", path: "/snapshot", icon: CloudBackup },
   { title: "Server Query", path: "/console", icon: TerminalSquare },
   { title: "Privilege Keys", path: "/tokens", icon: KeyRound },
   { title: "API Keys", path: "/apikeys", icon: FileKey2 },
   { title: "Ban List", path: "/bans", icon: Ban },
   { title: "Complaints List", path: "/complaints", icon: ShieldCheck },
-  { title: "List All Clients", path: "/clients", icon: Users },
-  { title: "Server Groups", path: "/servergroups", icon: Blocks },
+  { title: "List All Clients", path: "/clients", icon: User },
+  { title: "Server Groups", path: "/servergroups", icon: Users },
   { title: "Channel Groups", path: "/channelgroups", icon: MonitorCog },
 ]
 
 const permissionNavigation: NavItem[] = [
   {
-    title: "Server Group Permissions",
+    title: "Server Group",
     path: "/permissions/servergroup",
     icon: Users,
   },
   {
     title: "Client Permissions",
     path: "/permissions/client",
-    icon: Users,
+    icon: User,
   },
   {
     title: "Channel Permissions",
@@ -69,7 +70,7 @@ const permissionNavigation: NavItem[] = [
     icon: Blocks,
   },
   {
-    title: "Channel Group Permissions",
+    title: "Channel Groups",
     path: "/permissions/channelgroup",
     icon: MonitorCog,
   },
@@ -177,7 +178,7 @@ function Sidebar() {
     <aside className="hidden h-screen w-72 shrink-0 overflow-hidden border-r bg-card text-card-foreground lg:flex lg:flex-col">
       <div className="flex h-16 shrink-0 items-center gap-2 px-5">
         <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <Database className="size-4" />
+          <Server className="size-4" />
         </div>
         <div>
           <div className="text-base font-semibold leading-tight">TS3 Manager</div>
@@ -237,7 +238,7 @@ export function AppLayout() {
           <header className="z-20 flex h-16 shrink-0 items-center justify-between border-b bg-background/95 px-4 backdrop-blur lg:px-6">
             <div className="flex min-w-0 items-center gap-3">
               <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground lg:hidden">
-                <Database className="size-4" />
+                <Server className="size-4" />
               </div>
 
               <div className="min-w-0">
