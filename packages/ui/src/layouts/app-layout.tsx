@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { NavLink, Outlet, useLocation } from "react-router-dom"
 import {
   Ban,
@@ -138,13 +138,7 @@ function NavigationSection({ items }: { items: NavItem[] }) {
 function PermissionsNavigationSection() {
   const location = useLocation()
   const isPermissionsRoute = location.pathname.startsWith("/permissions")
-  const [open, setOpen] = useState(isPermissionsRoute)
-
-  useEffect(() => {
-    if (isPermissionsRoute) {
-      setOpen(true)
-    }
-  }, [isPermissionsRoute])
+  const [open, setOpen] = useState(false)
 
   return (
     <div className="space-y-1">

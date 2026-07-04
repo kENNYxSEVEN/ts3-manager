@@ -7,6 +7,7 @@ import { ChannelPermissions } from "@/pages/channel-permissions"
 import { Chat } from "@/pages/chat"
 import { ClientBan } from "@/pages/client-ban"
 import { ClientEdit } from "@/pages/client-edit"
+import { ClientPermissions } from "@/pages/client-permissions"
 import { LoginPage } from "@/pages/login"
 import { LogoutPage } from "@/pages/logout"
 import { PlaceholderPage } from "@/pages/placeholder"
@@ -87,6 +88,8 @@ export function AppRoutes() {
           <Route path="/client/:cldbid/ban" element={<ClientBan />} />
           <Route path="/client/:clid/edit" element={<ClientEdit />} />
           <Route path="/spacer/add" element={<SpacerAdd />} />
+          <Route path="/permissions/client" element={<ClientPermissions />} />
+          <Route path="/permissions/client/:cldbid" element={<ClientPermissions />} />
           <Route path="/permissions/channel" element={<ChannelPermissions />} />
           <Route path="/permissions/channel/:cid" element={<ChannelPermissions />} />
           {protectedRoutes
@@ -101,6 +104,8 @@ export function AppRoutes() {
                 route.path !== "/client/:cldbid/ban" &&
                 route.path !== "/client/:clid/edit" &&
                 route.path !== "/spacer/add" &&
+                route.path !== "/permissions/client" &&
+                route.path !== "/permissions/client/:cldbid" &&
                 route.path !== "/permissions/channel" &&
                 route.path !== "/permissions/channel/:cid",
             )
