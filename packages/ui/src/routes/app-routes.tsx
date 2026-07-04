@@ -3,6 +3,8 @@ import { Navigate, Route, Routes } from "react-router-dom"
 import { ProtectedRoute } from "@/auth/protected-route"
 import { AppLayout } from "@/layouts/app-layout"
 import { ChannelForm } from "@/pages/channel-form"
+import { Chat } from "@/pages/chat"
+import { ClientBan } from "@/pages/client-ban"
 import { ClientEdit } from "@/pages/client-edit"
 import { LoginPage } from "@/pages/login"
 import { LogoutPage } from "@/pages/logout"
@@ -77,8 +79,11 @@ export function AppRoutes() {
         <Route element={<AppLayout />}>
           <Route path="/servers" element={<ServersPage />} />
           <Route path="/serverviewer" element={<ServerViewerPage />} />
+          <Route path="/chat" element={<Chat />} />
+          <Route path="/chat/:cid" element={<Chat />} />
           <Route path="/channel/add" element={<ChannelForm mode="add" />} />
           <Route path="/channel/:cid/edit" element={<ChannelForm mode="edit" />} />
+          <Route path="/client/:cldbid/ban" element={<ClientBan />} />
           <Route path="/client/:clid/edit" element={<ClientEdit />} />
           <Route path="/spacer/add" element={<SpacerAdd />} />
           {protectedRoutes
@@ -86,8 +91,11 @@ export function AppRoutes() {
               (route) =>
                 route.path !== "/servers" &&
                 route.path !== "/serverviewer" &&
+                route.path !== "/chat" &&
+                route.path !== "/chat/:cid" &&
                 route.path !== "/channel/add" &&
                 route.path !== "/channel/:cid/edit" &&
+                route.path !== "/client/:cldbid/ban" &&
                 route.path !== "/client/:clid/edit" &&
                 route.path !== "/spacer/add",
             )

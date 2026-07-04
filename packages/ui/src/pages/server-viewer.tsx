@@ -413,6 +413,12 @@ function ChannelActions({
           Switch to Channel
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
+          <Link to={"/chat/" + String(channel.cid)}>
+            <MessageSquare className="size-4" />
+            Open Text Chat
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
           <Link to={"/channel/" + String(channel.cid) + "/edit?pid=" + String(channel.pid)}>
             <Edit className="size-4" />
             Edit Channel
@@ -451,7 +457,7 @@ function ClientActions({
   children: ReactNode
   onClientAction: (type: ClientActionType, client: ClientTreeItem) => void
 }) {
-  const clientDbId = client.clientDatabaseId ?? client.clid
+  const clientDbId = client.clientDatabaseId
 
   return (
     <DropdownMenu>
@@ -486,6 +492,7 @@ function ClientActions({
           Kick Client from Server
         </DropdownMenuItem>
 
+        {clientDbId !== undefined && clientDbId !== null ? (
         <DropdownMenuItem asChild>
           <Link
             className="text-destructive focus:text-destructive"
@@ -495,6 +502,12 @@ function ClientActions({
             Ban Client
           </Link>
         </DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem disabled>
+            <Ban className="size-4" />
+            Ban Client
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   )
