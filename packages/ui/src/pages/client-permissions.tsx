@@ -42,16 +42,10 @@ type Permission = {
   [key: string]: unknown
 }
 
-type ClientPermissionsData = {
-  availablePermissions: Permission[]
-  clients: ClientDbRow[]
-}
-
-const clientPermissionDataCache = new Map<string, ClientPermissionsData>()
-const clientPermissionDataFlights = new Map<
-  string,
-  Promise<ClientPermissionsData>
->()
+const availablePermissionCache = new Map<string, Permission[]>()
+const availablePermissionFlights = new Map<string, Promise<Permission[]>>()
+const clientCache = new Map<string, ClientDbRow[]>()
+const clientFlights = new Map<string, Promise<ClientDbRow[]>>()
 const clientPermissionCache = new Map<string, Permission[]>()
 const clientPermissionFlights = new Map<string, Promise<Permission[]>>()
 const rowsPerPageOptions = [50, 100, 150, "all"] as const
@@ -98,7 +92,11 @@ function mergePermissions(
   availablePermissions: Permission[],
   grantedPermissions: Permission[],
 ) {
-  return availablePermissions.map((permission) => {
+  if (!availablePermissions.length) {
+    return grantedPermissions
+  }
+
+  const mergedPermissions = availablePermissions.map((permission) => {
     const grantedPermission = grantedPermissions.find(
       (granted) => getPermissionKey(granted) === getPermissionKey(permission),
     )
@@ -112,6 +110,13 @@ function mergePermissions(
       }),
     }
   })
+
+  const knownPermissionIds = new Set(mergedPermissions.map(getPermissionKey))
+  const missingGrantedPermissions = grantedPermissions.filter(
+    (permission) => !knownPermissionIds.has(getPermissionKey(permission)),
+  )
+
+  return [...mergedPermissions, ...missingGrantedPermissions]
 }
 
 async function fullClientDBList() {
@@ -141,6 +146,9 @@ export function ClientPermissions() {
   const { cldbid } = useParams()
   const { queryUser, saveQueryUser, saveServerId, serverId } = useAuth()
   const queryUserRef = useRef(queryUser)
+  const selectServerFlightRef = useRef<ReturnType<
+    typeof TeamSpeak.selectServer
+  > | null>(null)
   const actionMenuRef = useRef<HTMLDivElement | null>(null)
   const { dismissToast, showError, toasts } = useToastStack()
   const [availablePermissions, setAvailablePermissions] = useState<Permission[]>([])
@@ -231,11 +239,20 @@ export function ClientPermissions() {
       return currentQueryUser
     }
 
-    const nextQueryUser = await TeamSpeak.selectServer(validSelectedServerId)
+    if (!selectServerFlightRef.current) {
+      selectServerFlightRef.current = TeamSpeak.selectServer(
+        validSelectedServerId,
+      ).finally(() => {
+        selectServerFlightRef.current = null
+      })
+    }
+
+    const nextQueryUser = await selectServerFlightRef.current
 
     saveServerId(validSelectedServerId)
 
     if (nextQueryUser) {
+      queryUserRef.current = nextQueryUser
       saveQueryUser(nextQueryUser)
     }
 
@@ -244,37 +261,55 @@ export function ClientPermissions() {
 
   const serverCacheKey = selectedServerId ? String(selectedServerId) : "__unknown__"
 
-  const loadGlobalData = useCallback(async () => {
+  const loadAvailablePermissions = useCallback(async () => {
     await ensureSelectedServer()
 
-    const cachedData = clientPermissionDataCache.get(serverCacheKey)
+    const cachedData = availablePermissionCache.get(serverCacheKey)
 
     if (cachedData) {
       return cachedData
     }
 
-    let flight = clientPermissionDataFlights.get(serverCacheKey)
+    let flight = availablePermissionFlights.get(serverCacheKey)
 
     if (!flight) {
-      flight = (async () => {
-        const [nextAvailablePermissions, nextClients] = await Promise.all([
-          TeamSpeak.execute<Permission[]>("permissionlist"),
-          fullClientDBList(),
-        ])
+      flight = TeamSpeak.execute<Permission[]>("permissionlist")
+        .then((permissions) => {
+          availablePermissionCache.set(serverCacheKey, permissions)
+          return permissions
+        })
+        .finally(() => {
+          availablePermissionFlights.delete(serverCacheKey)
+        })
 
-        const nextData = {
-          availablePermissions: nextAvailablePermissions,
-          clients: nextClients,
-        }
+      availablePermissionFlights.set(serverCacheKey, flight)
+    }
 
-        clientPermissionDataCache.set(serverCacheKey, nextData)
+    return flight
+  }, [ensureSelectedServer, serverCacheKey])
 
-        return nextData
-      })().finally(() => {
-        clientPermissionDataFlights.delete(serverCacheKey)
-      })
+  const loadClients = useCallback(async () => {
+    await ensureSelectedServer()
 
-      clientPermissionDataFlights.set(serverCacheKey, flight)
+    const cachedData = clientCache.get(serverCacheKey)
+
+    if (cachedData) {
+      return cachedData
+    }
+
+    let flight = clientFlights.get(serverCacheKey)
+
+    if (!flight) {
+      flight = fullClientDBList()
+        .then((nextClients) => {
+          clientCache.set(serverCacheKey, nextClients)
+          return nextClients
+        })
+        .finally(() => {
+          clientFlights.delete(serverCacheKey)
+        })
+
+      clientFlights.set(serverCacheKey, flight)
     }
 
     return flight
@@ -292,9 +327,12 @@ export function ClientPermissions() {
       let flight = clientPermissionFlights.get(key)
 
       if (!flight) {
-        flight = TeamSpeak.execute<Permission[]>("clientpermlist", {
-          cldbid: clientDbId,
-        })
+        flight = ensureSelectedServer()
+          .then(() =>
+            TeamSpeak.execute<Permission[]>("clientpermlist", {
+              cldbid: clientDbId,
+            }),
+          )
           .then((permissions) => {
             clientPermissionCache.set(key, permissions)
             return permissions
@@ -308,7 +346,7 @@ export function ClientPermissions() {
 
       return flight
     },
-    [serverCacheKey],
+    [ensureSelectedServer, serverCacheKey],
   )
 
   const refreshClientPermissions = useCallback(
@@ -342,17 +380,37 @@ export function ClientPermissions() {
 
     setInitialLoading(availablePermissions.length === 0 || clients.length === 0)
 
-    loadGlobalData()
+    const availablePermissionsPromise = loadAvailablePermissions()
+      .then((permissions) => {
+        if (!active) {
+          return
+        }
+
+        setAvailablePermissions(permissions)
+      })
+      .catch((loadError: unknown) => {
+        if (active) {
+          showError(getErrorMessage(loadError))
+        }
+      })
+
+    const clientsPromise = loadClients()
       .then((data) => {
         if (!active) {
           return
         }
 
-        setAvailablePermissions(data.availablePermissions)
-        setClients(data.clients)
+        setClients(data)
 
-        if (!cldbid && data.clients[0]) {
-          navigate("/permissions/client/" + String(data.clients[0].cldbid), {
+        if (!cldbid && data[0]) {
+          void getClientPermissions(data[0].cldbid).then(
+            (permissions) => {
+              if (active) {
+                setGrantedPermissions(permissions)
+              }
+            },
+          )
+          navigate("/permissions/client/" + String(data[0].cldbid), {
             replace: true,
           })
         }
@@ -362,16 +420,18 @@ export function ClientPermissions() {
           showError(getErrorMessage(loadError))
         }
       })
-      .finally(() => {
+    Promise.allSettled([availablePermissionsPromise, clientsPromise]).finally(
+      () => {
         if (active) {
           setInitialLoading(false)
         }
-      })
+      },
+    )
 
     return () => {
       active = false
     }
-  }, [availablePermissions.length, clients.length, cldbid, loadGlobalData, navigate, showError])
+  }, [availablePermissions.length, clients.length, cldbid, getClientPermissions, loadAvailablePermissions, loadClients, navigate, showError])
 
   useEffect(() => {
     if (!cldbid) {
@@ -561,8 +621,14 @@ export function ClientPermissions() {
     }
   }
 
-  const loading = initialLoading && availablePermissions.length === 0
-  const busy = initialLoading || clientLoading || submitting
+  const loading =
+    initialLoading &&
+    availablePermissions.length === 0 &&
+    grantedPermissions.length === 0
+  const busy =
+    clientLoading ||
+    submitting ||
+    (initialLoading && grantedPermissions.length === 0)
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-4">
@@ -582,6 +648,10 @@ export function ClientPermissions() {
                 navigate("/permissions/client/" + event.target.value)
               }
             >
+              {cldbid &&
+              !clients.some((client) => String(client.cldbid) === String(cldbid)) ? (
+                <option value={String(cldbid)}>Client {cldbid}</option>
+              ) : null}
               {clients.map((client) => (
                 <option key={client.cldbid} value={String(client.cldbid)}>
                   {client.clientNickname}

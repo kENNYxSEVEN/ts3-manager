@@ -71,7 +71,11 @@ function mergePermissions(
   availablePermissions: Permission[],
   grantedPermissions: Permission[],
 ) {
-  return availablePermissions.map((permission) => {
+  if (!availablePermissions.length) {
+    return grantedPermissions
+  }
+
+  const mergedPermissions = availablePermissions.map((permission) => {
     const grantedPermission = grantedPermissions.find(
       (granted) => getPermissionKey(granted) === getPermissionKey(permission),
     )
@@ -85,6 +89,13 @@ function mergePermissions(
       }),
     }
   })
+
+  const knownPermissionIds = new Set(mergedPermissions.map(getPermissionKey))
+  const missingGrantedPermissions = grantedPermissions.filter(
+    (permission) => !knownPermissionIds.has(getPermissionKey(permission)),
+  )
+
+  return [...mergedPermissions, ...missingGrantedPermissions]
 }
 
 export function PermissionPageFlow({

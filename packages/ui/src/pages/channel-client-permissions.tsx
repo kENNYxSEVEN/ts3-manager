@@ -22,14 +22,12 @@ type ClientDbRow = {
   [key: string]: unknown
 }
 
-type ChannelClientPermissionsData = {
-  availablePermissions: Permission[]
-  channels: ChannelRow[]
-  clients: ClientDbRow[]
-}
-
-const globalCache = new Map<string, ChannelClientPermissionsData>()
-const globalFlights = new Map<string, Promise<ChannelClientPermissionsData>>()
+const availablePermissionCache = new Map<string, Permission[]>()
+const availablePermissionFlights = new Map<string, Promise<Permission[]>>()
+const channelCache = new Map<string, ChannelRow[]>()
+const channelFlights = new Map<string, Promise<ChannelRow[]>>()
+const clientCache = new Map<string, ClientDbRow[]>()
+const clientFlights = new Map<string, Promise<ClientDbRow[]>>()
 const permissionCache = new Map<string, Permission[]>()
 const permissionFlights = new Map<string, Promise<Permission[]>>()
 
@@ -76,6 +74,9 @@ export function ChannelClientPermissions() {
   const { cid, cldbid } = useParams()
   const { queryUser, saveQueryUser, saveServerId, serverId } = useAuth()
   const queryUserRef = useRef(queryUser)
+  const selectServerFlightRef = useRef<ReturnType<
+    typeof TeamSpeak.selectServer
+  > | null>(null)
   const { dismissToast, showError, toasts } = useToastStack()
   const [availablePermissions, setAvailablePermissions] = useState<Permission[]>([])
   const [grantedPermissions, setGrantedPermissions] = useState<Permission[]>([])
@@ -111,34 +112,80 @@ export function ChannelClientPermissions() {
       return currentQueryUser
     }
 
-    const nextQueryUser = await TeamSpeak.selectServer(validSelectedServerId)
+    if (!selectServerFlightRef.current) {
+      selectServerFlightRef.current = TeamSpeak.selectServer(
+        validSelectedServerId,
+      ).finally(() => {
+        selectServerFlightRef.current = null
+      })
+    }
+
+    const nextQueryUser = await selectServerFlightRef.current
     saveServerId(validSelectedServerId)
-    if (nextQueryUser) saveQueryUser(nextQueryUser)
+    if (nextQueryUser) {
+      queryUserRef.current = nextQueryUser
+      saveQueryUser(nextQueryUser)
+    }
     return nextQueryUser
   }, [saveQueryUser, saveServerId, selectedServerId])
 
   const serverCacheKey = selectedServerId ? String(selectedServerId) : "__unknown__"
 
-  const loadGlobalData = useCallback(async () => {
+  const loadAvailablePermissions = useCallback(async () => {
     await ensureSelectedServer()
-    const cached = globalCache.get(serverCacheKey)
+    const cached = availablePermissionCache.get(serverCacheKey)
     if (cached) return cached
 
-    let flight = globalFlights.get(serverCacheKey)
+    let flight = availablePermissionFlights.get(serverCacheKey)
     if (!flight) {
-      flight = Promise.all([
-        TeamSpeak.execute<Permission[]>("permissionlist"),
-        TeamSpeak.execute<ChannelRow[]>("channellist"),
-        fullClientDBList(),
-      ])
-        .then(([availablePermissions, channels, clients]) => {
-          const data = { availablePermissions, channels, clients }
-          globalCache.set(serverCacheKey, data)
-          return data
+      flight = TeamSpeak.execute<Permission[]>("permissionlist")
+        .then((permissions) => {
+          availablePermissionCache.set(serverCacheKey, permissions)
+          return permissions
         })
-        .finally(() => globalFlights.delete(serverCacheKey))
+        .finally(() => availablePermissionFlights.delete(serverCacheKey))
 
-      globalFlights.set(serverCacheKey, flight)
+      availablePermissionFlights.set(serverCacheKey, flight)
+    }
+
+    return flight
+  }, [ensureSelectedServer, serverCacheKey])
+
+  const loadChannels = useCallback(async () => {
+    await ensureSelectedServer()
+    const cached = channelCache.get(serverCacheKey)
+    if (cached) return cached
+
+    let flight = channelFlights.get(serverCacheKey)
+    if (!flight) {
+      flight = TeamSpeak.execute<ChannelRow[]>("channellist")
+        .then((nextChannels) => {
+          channelCache.set(serverCacheKey, nextChannels)
+          return nextChannels
+        })
+        .finally(() => channelFlights.delete(serverCacheKey))
+
+      channelFlights.set(serverCacheKey, flight)
+    }
+
+    return flight
+  }, [ensureSelectedServer, serverCacheKey])
+
+  const loadClients = useCallback(async () => {
+    await ensureSelectedServer()
+    const cached = clientCache.get(serverCacheKey)
+    if (cached) return cached
+
+    let flight = clientFlights.get(serverCacheKey)
+    if (!flight) {
+      flight = fullClientDBList()
+        .then((nextClients) => {
+          clientCache.set(serverCacheKey, nextClients)
+          return nextClients
+        })
+        .finally(() => clientFlights.delete(serverCacheKey))
+
+      clientFlights.set(serverCacheKey, flight)
     }
 
     return flight
@@ -157,10 +204,13 @@ export function ChannelClientPermissions() {
 
       let flight = permissionFlights.get(key)
       if (!flight) {
-        flight = TeamSpeak.execute<Permission[]>("channelclientpermlist", {
-          cid: channelId,
-          cldbid: clientDbId,
-        })
+        flight = ensureSelectedServer()
+          .then(() =>
+            TeamSpeak.execute<Permission[]>("channelclientpermlist", {
+              cid: channelId,
+              cldbid: clientDbId,
+            }),
+          )
           .then((permissions) => {
             permissionCache.set(key, permissions)
             return permissions
@@ -172,7 +222,7 @@ export function ChannelClientPermissions() {
 
       return flight
     },
-    [serverCacheKey],
+    [ensureSelectedServer, serverCacheKey],
   )
 
   const refreshPermissions = useCallback(
@@ -203,29 +253,72 @@ export function ChannelClientPermissions() {
         clients.length === 0,
     )
 
-    loadGlobalData()
-      .then((data) => {
+    const availablePermissionsPromise = loadAvailablePermissions()
+      .then((permissions) => {
         if (!active) return
-        setAvailablePermissions(data.availablePermissions)
-        setChannels(data.channels)
-        setClients(data.clients)
-        if ((!cid || !cldbid) && data.channels[0] && data.clients[0]) {
-          navigate(
-            "/permissions/channel/" +
-              String(data.channels[0].cid) +
-              "/client/" +
-              String(data.clients[0].cldbid),
-            { replace: true },
-          )
-        }
+        setAvailablePermissions(permissions)
       })
       .catch((error: unknown) => active && showError(getErrorMessage(error)))
-      .finally(() => active && setInitialLoading(false))
+
+    const channelsPromise = loadChannels()
+      .then((data) => {
+        if (!active) return []
+        setChannels(data)
+        return data
+      })
+      .catch((error: unknown) => {
+        if (active) showError(getErrorMessage(error))
+        return []
+      })
+
+    const clientsPromise = loadClients()
+      .then((data) => {
+        if (!active) return []
+        setClients(data)
+        return data
+      })
+      .catch((error: unknown) => {
+        if (active) showError(getErrorMessage(error))
+        return []
+      })
+
+    Promise.all([channelsPromise, clientsPromise]).then(
+      ([nextChannels, nextClients]) => {
+        if (
+          !active ||
+          cid ||
+          cldbid ||
+          !nextChannels?.[0] ||
+          !nextClients?.[0]
+        ) {
+          return
+        }
+
+        void getPermissions(nextChannels[0].cid, nextClients[0].cldbid).then(
+            (permissions) => {
+              if (active) setGrantedPermissions(permissions)
+            },
+          )
+          navigate(
+            "/permissions/channel/" +
+              String(nextChannels[0].cid) +
+              "/client/" +
+              String(nextClients[0].cldbid),
+            { replace: true },
+          )
+      },
+    )
+
+    Promise.allSettled([
+      availablePermissionsPromise,
+      channelsPromise,
+      clientsPromise,
+    ]).finally(() => active && setInitialLoading(false))
 
     return () => {
       active = false
     }
-  }, [availablePermissions.length, channels.length, cid, cldbid, clients.length, loadGlobalData, navigate, showError])
+  }, [availablePermissions.length, channels.length, cid, cldbid, clients.length, getPermissions, loadAvailablePermissions, loadChannels, loadClients, navigate, showError])
 
   useEffect(() => {
     if (!cid || !cldbid) return
@@ -301,27 +394,47 @@ export function ChannelClientPermissions() {
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
       <PermissionPageFlow
         availablePermissions={availablePermissions}
-        busy={initialLoading || entityLoading || submitting}
+        busy={
+          entityLoading ||
+          submitting ||
+          (initialLoading && grantedPermissions.length === 0)
+        }
         editableFields={["permvalue"]}
         grantedPermissions={grantedPermissions}
-        loading={initialLoading && availablePermissions.length === 0}
+        loading={
+          initialLoading &&
+          availablePermissions.length === 0 &&
+          grantedPermissions.length === 0
+        }
         selectors={[
           {
             label: "Channel",
-            options: channels.map((channel) => ({
-              label: channel.channelName,
-              value: String(channel.cid),
-            })),
+            options: [
+              ...(cid &&
+              !channels.some((channel) => String(channel.cid) === String(cid))
+                ? [{ label: "Channel " + cid, value: String(cid) }]
+                : []),
+              ...channels.map((channel) => ({
+                label: channel.channelName,
+                value: String(channel.cid),
+              })),
+            ],
             value: cid ?? "",
             onChange: (value) =>
               navigatePair(value, cldbid ?? String(clients[0]?.cldbid ?? "")),
           },
           {
             label: "Client",
-            options: clients.map((client) => ({
-              label: client.clientNickname,
-              value: String(client.cldbid),
-            })),
+            options: [
+              ...(cldbid &&
+              !clients.some((client) => String(client.cldbid) === String(cldbid))
+                ? [{ label: "Client " + cldbid, value: String(cldbid) }]
+                : []),
+              ...clients.map((client) => ({
+                label: client.clientNickname,
+                value: String(client.cldbid),
+              })),
+            ],
             value: cldbid ?? "",
             onChange: (value) =>
               navigatePair(cid ?? String(channels[0]?.cid ?? ""), value),

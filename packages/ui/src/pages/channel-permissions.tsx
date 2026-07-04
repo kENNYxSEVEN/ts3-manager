@@ -42,16 +42,10 @@ type Permission = {
   [key: string]: unknown
 }
 
-type ChannelPermissionsData = {
-  availablePermissions: Permission[]
-  channels: ChannelRow[]
-}
-
-const channelPermissionDataCache = new Map<string, ChannelPermissionsData>()
-const channelPermissionDataFlights = new Map<
-  string,
-  Promise<ChannelPermissionsData>
->()
+const availablePermissionCache = new Map<string, Permission[]>()
+const availablePermissionFlights = new Map<string, Promise<Permission[]>>()
+const channelCache = new Map<string, ChannelRow[]>()
+const channelFlights = new Map<string, Promise<ChannelRow[]>>()
 const channelPermissionCache = new Map<string, Permission[]>()
 const channelPermissionFlights = new Map<string, Promise<Permission[]>>()
 const rowsPerPageOptions = [50, 100, 150, "all"] as const
@@ -94,7 +88,11 @@ function mergePermissions(
   availablePermissions: Permission[],
   grantedPermissions: Permission[],
 ) {
-  return availablePermissions.map((permission) => {
+  if (!availablePermissions.length) {
+    return grantedPermissions
+  }
+
+  const mergedPermissions = availablePermissions.map((permission) => {
     const grantedPermission = grantedPermissions.find(
       (granted) => getPermissionKey(granted) === getPermissionKey(permission),
     )
@@ -108,6 +106,13 @@ function mergePermissions(
       }),
     }
   })
+
+  const knownPermissionIds = new Set(mergedPermissions.map(getPermissionKey))
+  const missingGrantedPermissions = grantedPermissions.filter(
+    (permission) => !knownPermissionIds.has(getPermissionKey(permission)),
+  )
+
+  return [...mergedPermissions, ...missingGrantedPermissions]
 }
 
 export function ChannelPermissions() {
@@ -115,6 +120,9 @@ export function ChannelPermissions() {
   const { cid } = useParams()
   const { queryUser, saveQueryUser, saveServerId, serverId } = useAuth()
   const queryUserRef = useRef(queryUser)
+  const selectServerFlightRef = useRef<ReturnType<
+    typeof TeamSpeak.selectServer
+  > | null>(null)
   const actionMenuRef = useRef<HTMLDivElement | null>(null)
   const { dismissToast, showError, toasts } = useToastStack()
   const [availablePermissions, setAvailablePermissions] = useState<Permission[]>([])
@@ -204,11 +212,20 @@ export function ChannelPermissions() {
       return currentQueryUser
     }
 
-    const nextQueryUser = await TeamSpeak.selectServer(validSelectedServerId)
+    if (!selectServerFlightRef.current) {
+      selectServerFlightRef.current = TeamSpeak.selectServer(
+        validSelectedServerId,
+      ).finally(() => {
+        selectServerFlightRef.current = null
+      })
+    }
+
+    const nextQueryUser = await selectServerFlightRef.current
 
     saveServerId(validSelectedServerId)
 
     if (nextQueryUser) {
+      queryUserRef.current = nextQueryUser
       saveQueryUser(nextQueryUser)
     }
 
@@ -217,37 +234,55 @@ export function ChannelPermissions() {
 
   const serverCacheKey = selectedServerId ? String(selectedServerId) : "__unknown__"
 
-  const loadGlobalData = useCallback(async () => {
+  const loadAvailablePermissions = useCallback(async () => {
     await ensureSelectedServer()
 
-    const cachedData = channelPermissionDataCache.get(serverCacheKey)
+    const cachedData = availablePermissionCache.get(serverCacheKey)
 
     if (cachedData) {
       return cachedData
     }
 
-    let flight = channelPermissionDataFlights.get(serverCacheKey)
+    let flight = availablePermissionFlights.get(serverCacheKey)
 
     if (!flight) {
-      flight = (async () => {
-        const [nextAvailablePermissions, nextChannels] = await Promise.all([
-          TeamSpeak.execute<Permission[]>("permissionlist"),
-          TeamSpeak.execute<ChannelRow[]>("channellist"),
-        ])
+      flight = TeamSpeak.execute<Permission[]>("permissionlist")
+        .then((permissions) => {
+          availablePermissionCache.set(serverCacheKey, permissions)
+          return permissions
+        })
+        .finally(() => {
+          availablePermissionFlights.delete(serverCacheKey)
+        })
 
-        const nextData = {
-          availablePermissions: nextAvailablePermissions,
-          channels: nextChannels,
-        }
+      availablePermissionFlights.set(serverCacheKey, flight)
+    }
 
-        channelPermissionDataCache.set(serverCacheKey, nextData)
+    return flight
+  }, [ensureSelectedServer, serverCacheKey])
 
-        return nextData
-      })().finally(() => {
-        channelPermissionDataFlights.delete(serverCacheKey)
-      })
+  const loadChannels = useCallback(async () => {
+    await ensureSelectedServer()
 
-      channelPermissionDataFlights.set(serverCacheKey, flight)
+    const cachedData = channelCache.get(serverCacheKey)
+
+    if (cachedData) {
+      return cachedData
+    }
+
+    let flight = channelFlights.get(serverCacheKey)
+
+    if (!flight) {
+      flight = TeamSpeak.execute<ChannelRow[]>("channellist")
+        .then((nextChannels) => {
+          channelCache.set(serverCacheKey, nextChannels)
+          return nextChannels
+        })
+        .finally(() => {
+          channelFlights.delete(serverCacheKey)
+        })
+
+      channelFlights.set(serverCacheKey, flight)
     }
 
     return flight
@@ -265,9 +300,12 @@ export function ChannelPermissions() {
       let flight = channelPermissionFlights.get(key)
 
       if (!flight) {
-        flight = TeamSpeak.execute<Permission[]>("channelpermlist", {
-          cid: channelId,
-        })
+        flight = ensureSelectedServer()
+          .then(() =>
+            TeamSpeak.execute<Permission[]>("channelpermlist", {
+              cid: channelId,
+            }),
+          )
           .then((permissions) => {
             channelPermissionCache.set(key, permissions)
             return permissions
@@ -281,7 +319,7 @@ export function ChannelPermissions() {
 
       return flight
     },
-    [serverCacheKey],
+    [ensureSelectedServer, serverCacheKey],
   )
 
   const refreshChannelPermissions = useCallback(
@@ -315,17 +353,37 @@ export function ChannelPermissions() {
 
     setInitialLoading(availablePermissions.length === 0 || channels.length === 0)
 
-    loadGlobalData()
+    const availablePermissionsPromise = loadAvailablePermissions()
+      .then((permissions) => {
+        if (!active) {
+          return
+        }
+
+        setAvailablePermissions(permissions)
+      })
+      .catch((loadError: unknown) => {
+        if (active) {
+          showError(getErrorMessage(loadError))
+        }
+      })
+
+    const channelsPromise = loadChannels()
       .then((data) => {
         if (!active) {
           return
         }
 
-        setAvailablePermissions(data.availablePermissions)
-        setChannels(data.channels)
+        setChannels(data)
 
-        if (!cid && data.channels[0]) {
-          navigate("/permissions/channel/" + String(data.channels[0].cid), {
+        if (!cid && data[0]) {
+          void getChannelPermissions(data[0].cid).then(
+            (permissions) => {
+              if (active) {
+                setGrantedPermissions(permissions)
+              }
+            },
+          )
+          navigate("/permissions/channel/" + String(data[0].cid), {
             replace: true,
           })
         }
@@ -335,16 +393,18 @@ export function ChannelPermissions() {
           showError(getErrorMessage(loadError))
         }
       })
-      .finally(() => {
+    Promise.allSettled([availablePermissionsPromise, channelsPromise]).finally(
+      () => {
         if (active) {
           setInitialLoading(false)
         }
-      })
+      },
+    )
 
     return () => {
       active = false
     }
-  }, [availablePermissions.length, channels.length, cid, loadGlobalData, navigate, showError])
+  }, [availablePermissions.length, channels.length, cid, getChannelPermissions, loadAvailablePermissions, loadChannels, navigate, showError])
 
   useEffect(() => {
     if (!cid) {
@@ -533,8 +593,14 @@ export function ChannelPermissions() {
     }
   }
 
-  const loading = initialLoading && availablePermissions.length === 0
-  const busy = initialLoading || channelLoading || submitting
+  const loading =
+    initialLoading &&
+    availablePermissions.length === 0 &&
+    grantedPermissions.length === 0
+  const busy =
+    channelLoading ||
+    submitting ||
+    (initialLoading && grantedPermissions.length === 0)
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-4">
@@ -554,6 +620,10 @@ export function ChannelPermissions() {
                 navigate("/permissions/channel/" + event.target.value)
               }
             >
+              {cid &&
+              !channels.some((channel) => String(channel.cid) === String(cid)) ? (
+                <option value={String(cid)}>Channel {cid}</option>
+              ) : null}
               {channels.map((channel) => (
                 <option key={channel.cid} value={String(channel.cid)}>
                   {channel.channelName}

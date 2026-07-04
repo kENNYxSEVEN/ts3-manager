@@ -17,13 +17,10 @@ type ChannelGroup = {
   [key: string]: unknown
 }
 
-type ChannelGroupPermissionsData = {
-  availablePermissions: Permission[]
-  groups: ChannelGroup[]
-}
-
-const globalCache = new Map<string, ChannelGroupPermissionsData>()
-const globalFlights = new Map<string, Promise<ChannelGroupPermissionsData>>()
+const availablePermissionCache = new Map<string, Permission[]>()
+const availablePermissionFlights = new Map<string, Promise<Permission[]>>()
+const groupCache = new Map<string, ChannelGroup[]>()
+const groupFlights = new Map<string, Promise<ChannelGroup[]>>()
 const permissionCache = new Map<string, Permission[]>()
 const permissionFlights = new Map<string, Promise<Permission[]>>()
 
@@ -50,6 +47,9 @@ export function ChannelGroupPermissions() {
   const { cgid } = useParams()
   const { queryUser, saveQueryUser, saveServerId, serverId } = useAuth()
   const queryUserRef = useRef(queryUser)
+  const selectServerFlightRef = useRef<ReturnType<
+    typeof TeamSpeak.selectServer
+  > | null>(null)
   const { dismissToast, showError, toasts } = useToastStack()
   const [availablePermissions, setAvailablePermissions] = useState<Permission[]>([])
   const [grantedPermissions, setGrantedPermissions] = useState<Permission[]>([])
@@ -84,33 +84,60 @@ export function ChannelGroupPermissions() {
       return currentQueryUser
     }
 
-    const nextQueryUser = await TeamSpeak.selectServer(validSelectedServerId)
+    if (!selectServerFlightRef.current) {
+      selectServerFlightRef.current = TeamSpeak.selectServer(
+        validSelectedServerId,
+      ).finally(() => {
+        selectServerFlightRef.current = null
+      })
+    }
+
+    const nextQueryUser = await selectServerFlightRef.current
     saveServerId(validSelectedServerId)
-    if (nextQueryUser) saveQueryUser(nextQueryUser)
+    if (nextQueryUser) {
+      queryUserRef.current = nextQueryUser
+      saveQueryUser(nextQueryUser)
+    }
     return nextQueryUser
   }, [saveQueryUser, saveServerId, selectedServerId])
 
   const serverCacheKey = selectedServerId ? String(selectedServerId) : "__unknown__"
 
-  const loadGlobalData = useCallback(async () => {
+  const loadAvailablePermissions = useCallback(async () => {
     await ensureSelectedServer()
-    const cached = globalCache.get(serverCacheKey)
+    const cached = availablePermissionCache.get(serverCacheKey)
     if (cached) return cached
 
-    let flight = globalFlights.get(serverCacheKey)
+    let flight = availablePermissionFlights.get(serverCacheKey)
     if (!flight) {
-      flight = Promise.all([
-        TeamSpeak.execute<Permission[]>("permissionlist"),
-        TeamSpeak.execute<ChannelGroup[]>("channelgrouplist"),
-      ])
-        .then(([availablePermissions, groups]) => {
-          const data = { availablePermissions, groups }
-          globalCache.set(serverCacheKey, data)
-          return data
+      flight = TeamSpeak.execute<Permission[]>("permissionlist")
+        .then((permissions) => {
+          availablePermissionCache.set(serverCacheKey, permissions)
+          return permissions
         })
-        .finally(() => globalFlights.delete(serverCacheKey))
+        .finally(() => availablePermissionFlights.delete(serverCacheKey))
 
-      globalFlights.set(serverCacheKey, flight)
+      availablePermissionFlights.set(serverCacheKey, flight)
+    }
+
+    return flight
+  }, [ensureSelectedServer, serverCacheKey])
+
+  const loadGroups = useCallback(async () => {
+    await ensureSelectedServer()
+    const cached = groupCache.get(serverCacheKey)
+    if (cached) return cached
+
+    let flight = groupFlights.get(serverCacheKey)
+    if (!flight) {
+      flight = TeamSpeak.execute<ChannelGroup[]>("channelgrouplist")
+        .then((nextGroups) => {
+          groupCache.set(serverCacheKey, nextGroups)
+          return nextGroups
+        })
+        .finally(() => groupFlights.delete(serverCacheKey))
+
+      groupFlights.set(serverCacheKey, flight)
     }
 
     return flight
@@ -124,9 +151,12 @@ export function ChannelGroupPermissions() {
 
       let flight = permissionFlights.get(key)
       if (!flight) {
-        flight = TeamSpeak.execute<Permission[]>("channelgrouppermlist", {
-          cgid: groupId,
-        })
+        flight = ensureSelectedServer()
+          .then(() =>
+            TeamSpeak.execute<Permission[]>("channelgrouppermlist", {
+              cgid: groupId,
+            }),
+          )
           .then((permissions) => {
             permissionCache.set(key, permissions)
             return permissions
@@ -138,7 +168,7 @@ export function ChannelGroupPermissions() {
 
       return flight
     },
-    [serverCacheKey],
+    [ensureSelectedServer, serverCacheKey],
   )
 
   const refreshPermissions = useCallback(
@@ -160,24 +190,36 @@ export function ChannelGroupPermissions() {
     let active = true
     setInitialLoading(availablePermissions.length === 0 || groups.length === 0)
 
-    loadGlobalData()
+    const availablePermissionsPromise = loadAvailablePermissions()
+      .then((permissions) => {
+        if (!active) return
+        setAvailablePermissions(permissions)
+      })
+      .catch((error: unknown) => active && showError(getErrorMessage(error)))
+
+    const groupsPromise = loadGroups()
       .then((data) => {
         if (!active) return
-        setAvailablePermissions(data.availablePermissions)
-        setGroups(data.groups)
-        if (!cgid && data.groups[0]) {
-          navigate("/permissions/channelgroup/" + String(data.groups[0].cgid), {
+        setGroups(data)
+        if (!cgid && data[0]) {
+          void getPermissions(data[0].cgid).then((permissions) => {
+            if (active) setGrantedPermissions(permissions)
+          })
+          navigate("/permissions/channelgroup/" + String(data[0].cgid), {
             replace: true,
           })
         }
       })
       .catch((error: unknown) => active && showError(getErrorMessage(error)))
-      .finally(() => active && setInitialLoading(false))
+
+    Promise.allSettled([availablePermissionsPromise, groupsPromise]).finally(
+      () => active && setInitialLoading(false),
+    )
 
     return () => {
       active = false
     }
-  }, [availablePermissions.length, cgid, groups.length, loadGlobalData, navigate, showError])
+  }, [availablePermissions.length, cgid, getPermissions, groups.length, loadAvailablePermissions, loadGroups, navigate, showError])
 
   useEffect(() => {
     if (!cgid) return
@@ -246,10 +288,18 @@ export function ChannelGroupPermissions() {
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
       <PermissionPageFlow
         availablePermissions={availablePermissions}
-        busy={initialLoading || entityLoading || submitting}
+        busy={
+          entityLoading ||
+          submitting ||
+          (initialLoading && grantedPermissions.length === 0)
+        }
         editableFields={["permvalue"]}
         grantedPermissions={grantedPermissions}
-        loading={initialLoading && availablePermissions.length === 0}
+        loading={
+          initialLoading &&
+          availablePermissions.length === 0 &&
+          grantedPermissions.length === 0
+        }
         selectors={[
           {
             label: "Channel Group",
