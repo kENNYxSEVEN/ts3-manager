@@ -16,6 +16,7 @@ import { LogoutPage } from "@/pages/logout"
 import { PlaceholderPage } from "@/pages/placeholder"
 import { ServerViewerPage } from "@/pages/server-viewer"
 import { ServerGroupPermissions } from "@/pages/server-group-permissions"
+import { ServerEdit } from "@/pages/server-edit"
 import { ServersPage } from "@/pages/servers"
 import { SpacerAdd } from "@/pages/spacer-add"
 import { RouteProgress } from "@/components/route-progress"
@@ -84,6 +85,7 @@ export function AppRoutes() {
       <Route element={<ProtectedRoute />}>
         <Route element={<AppLayout />}>
           <Route path="/servers" element={<ServersPage />} />
+          <Route path="/server/edit" element={<ServerEdit />} />
           <Route path="/serverviewer" element={<ServerViewerPage />} />
           <Route path="/logs" element={<Logs />} />
           <Route path="/chat" element={<Chat />} />
@@ -107,6 +109,7 @@ export function AppRoutes() {
             .filter(
               (route) =>
                 route.path !== "/servers" &&
+                route.path !== "/server/edit" &&
                 route.path !== "/serverviewer" &&
                 route.path !== "/logs" &&
                 route.path !== "/chat" &&

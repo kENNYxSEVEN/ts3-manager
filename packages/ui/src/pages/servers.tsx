@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Link, useLocation } from "react-router-dom"
+import { Link, useLocation, useNavigate } from "react-router-dom"
 import {
   ChevronLeft,
   ChevronRight,
@@ -249,6 +249,7 @@ function StatusControl({
 
 export function ServersPage() {
   const location = useLocation()
+  const navigate = useNavigate()
   const locationState = location.state as ServersLocationState | null
   const { queryUser, serverId, saveServerId, removeServerId, saveQueryUser } =
     useAuth()
@@ -469,6 +470,34 @@ const selectedServerId = useMemo(() => {
     }
   }
 
+  const handleEditServer = async (server: ServerRow) => {
+    if (isOffline(server.virtualserverStatus) || loading || actionBusy) {
+      return
+    }
+
+    setActionBusy(true)
+    setError(null)
+
+    try {
+      await TeamSpeak.useServer(server.virtualserverId, { progress: "background" })
+      saveServerId(server.virtualserverId)
+
+      const nextQueryUser = await TeamSpeak.ensureQueryIdentity({
+        progress: "background",
+      })
+
+      if (nextQueryUser) {
+        saveQueryUser(nextQueryUser)
+      }
+
+      navigate("/server/edit")
+    } catch (editError) {
+      setError(getErrorMessage(editError))
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
   const startServer = async (server: ServerRow) => {
     setActionBusy(true)
     setError(null)
@@ -645,16 +674,15 @@ const selectedServerId = useMemo(() => {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="start" className="w-40">
-                            <DropdownMenuItem asChild disabled={offline}>
-                              <Link
-                                className={cn(
-                                  offline && "pointer-events-none opacity-50",
-                                )}
-                                to="/server/edit"
-                              >
-                                <Edit className="size-4" />
-                                Edit Server
-                              </Link>
+                            <DropdownMenuItem
+                              disabled={offline || loading || actionBusy}
+                              onSelect={(event) => {
+                                event.preventDefault()
+                                void handleEditServer(server)
+                              }}
+                            >
+                              <Edit className="size-4" />
+                              Edit Server
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               className="text-destructive focus:text-destructive"
