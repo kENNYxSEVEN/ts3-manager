@@ -1,9 +1,10 @@
 import { useEffect, useState, type FormEvent } from "react"
 import { useNavigate } from "react-router-dom"
-import { ThemeToggle } from "@/components/theme-toggle"
 
 import { TeamSpeak } from "@/api/teamspeak"
 import { useAuth } from "@/auth/auth-context"
+import { AppModal } from "@/components/app-modal"
+import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -135,6 +136,9 @@ export function LoginPage() {
       saveToken(response.token)
       setConnected(true)
       setLoggedOut(false)
+      void TeamSpeak.bootstrapConnection({ progress: "background" }).catch(
+        () => undefined,
+      )
       navigate("/servers", { state: { from: "/login" } })
     } catch (connectError) {
       setError(getErrorMessage(connectError))
@@ -143,101 +147,115 @@ export function LoginPage() {
     }
   }
 
+  const closeErrorModal = () => setError(null)
+
   return (
-  <div className="flex min-h-screen flex-col bg-background text-foreground">
-    <header className="flex h-14 shrink-0 items-center justify-between border-b bg-background/95 px-4 backdrop-blur lg:px-6">
-      <div>
-      </div>
+    <div className="flex min-h-screen flex-col bg-background text-foreground">
+      <header className="flex h-14 shrink-0 items-center justify-between border-b bg-background/95 px-4 backdrop-blur lg:px-6">
+        <div />
 
-      <ThemeToggle />
-    </header>
+        <ThemeToggle />
+      </header>
 
-    <main className="flex min-h-0 flex-1 items-center justify-center p-6">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>TS3 Manager</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form className="space-y-5" onSubmit={handleSubmit}>
-            <div className="grid grid-cols-[1fr_7rem] gap-3">
+      <main className="flex min-h-0 flex-1 items-center justify-center p-6">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>TS3 Manager</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form className="space-y-5" onSubmit={handleSubmit}>
+              <div className="grid grid-cols-[1fr_7rem] gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="host">Server</Label>
+                  <Input
+                    id="host"
+                    placeholder="IP or Domain"
+                    required
+                    value={form.host}
+                    onChange={(event) => updateField("host", event.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="queryport">Port</Label>
+                  <Input
+                    id="queryport"
+                    min={1}
+                    required
+                    type="number"
+                    value={form.queryport}
+                    onChange={(event) =>
+                      updateField("queryport", Number(event.target.value))
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="ssh"
+                  checked={form.ssh}
+                  onCheckedChange={(checked) => updateSsh(checked === true)}
+                />
+                <Label htmlFor="ssh">SSH</Label>
+              </div>
+
               <div className="space-y-2">
-                <Label htmlFor="host">Server</Label>
+                <Label htmlFor="username">Name</Label>
                 <Input
-                  id="host"
-                  placeholder="IP or Domain"
+                  id="username"
+                  autoComplete="username"
+                  name="username"
+                  placeholder="e.g. serveradmin"
                   required
-                  value={form.host}
-                  onChange={(event) => updateField("host", event.target.value)}
+                  value={form.username}
+                  onChange={(event) => updateField("username", event.target.value)}
                 />
               </div>
+
               <div className="space-y-2">
-                <Label htmlFor="queryport">Port</Label>
+                <Label htmlFor="password">Password</Label>
                 <Input
-                  id="queryport"
-                  min={1}
+                  id="password"
+                  autoComplete="current-password"
+                  name="password"
                   required
-                  type="number"
-                  value={form.queryport}
-                  onChange={(event) =>
-                    updateField("queryport", Number(event.target.value))
-                  }
+                  type="password"
+                  value={form.password}
+                  onChange={(event) => updateField("password", event.target.value)}
                 />
               </div>
-            </div>
 
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="ssh"
-                checked={form.ssh}
-                onCheckedChange={(checked) => updateSsh(checked === true)}
-              />
-              <Label htmlFor="ssh">SSH</Label>
-            </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="rememberLogin"
+                  checked={rememberLogin}
+                  onCheckedChange={(checked) => setRememberLogin(checked === true)}
+                />
+                <Label htmlFor="rememberLogin">Remember me</Label>
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="username">Name</Label>
-              <Input
-                id="username"
-                autoComplete="username"
-                name="username"
-                placeholder="e.g. serveradmin"
-                required
-                value={form.username}
-                onChange={(event) => updateField("username", event.target.value)}
-              />
-            </div>
+              <Button className="w-full" disabled={loading} type="submit">
+                {loading ? "Connecting..." : "Connect"}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </main>
 
-            <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                autoComplete="current-password"
-                name="password"
-                required
-                type="password"
-                value={form.password}
-                onChange={(event) => updateField("password", event.target.value)}
-              />
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="rememberLogin"
-                checked={rememberLogin}
-                onCheckedChange={(checked) => setRememberLogin(checked === true)}
-              />
-              <Label htmlFor="rememberLogin">Remember me</Label>
-            </div>
-
-            {error ? <p className="text-sm text-destructive">{error}</p> : null}
-
-            <Button className="w-full" disabled={loading} type="submit">
-              {loading ? "Connecting..." : "Connect"}
+      <AppModal
+        open={Boolean(error)}
+        title="Connection error"
+        onClose={closeErrorModal}
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">{error}</p>
+          <div className="flex justify-end">
+            <Button type="button" onClick={closeErrorModal}>
+              OK
             </Button>
-          </form>
-        </CardContent>
-      </Card>
-    </main>
-  </div>
-)
+          </div>
+        </div>
+      </AppModal>
+    </div>
+  )
 }

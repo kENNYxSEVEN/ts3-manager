@@ -655,20 +655,6 @@ export function ServerViewerPage() {
     [showError],
   )
 
-  const loadQueryUser = useCallback(async () => {
-    const userInfo = await TeamSpeak.execute<QueryUser[]>(
-      "whoami",
-      {},
-      [],
-      { progress: "background" },
-    )
-    const nextQueryUser = userInfo[0] ?? {}
-
-    saveQueryUser(nextQueryUser)
-
-    return nextQueryUser
-  }, [saveQueryUser])
-
   const ensureSelectedServer = useCallback(async (
     progress: "foreground" | "background" | "none" = "foreground",
   ) => {
@@ -688,18 +674,14 @@ export function ServerViewerPage() {
       return currentQueryUser
     }
 
-    const nextQueryUser = await TeamSpeak.selectServer(validSelectedServerId, {
+    await TeamSpeak.useServer(validSelectedServerId, {
       progress,
     })
 
     saveServerId(validSelectedServerId)
 
-    if (nextQueryUser) {
-      saveQueryUser(nextQueryUser)
-    }
-
-    return nextQueryUser
-  }, [saveQueryUser, saveServerId, selectedServerId])
+    return undefined
+  }, [saveServerId, selectedServerId])
 
   const loadChannelTree = useCallback(
     async (
@@ -737,16 +719,18 @@ export function ServerViewerPage() {
           )
         }
 
-        const [nextChannels, nextClients] = await Promise.all([
+        const [nextChannels, nextClients, nextQueryUser] = await Promise.all([
           TeamSpeak.execute<ChannelRow[]>("channellist", {}, [], {
             progress: options.progress ?? "background",
           }),
           TeamSpeak.execute<ClientRow[]>("clientlist", {}, ["-voice", "-away"], {
             progress: options.progress ?? "background",
           }),
+          selectedQueryUser ??
+            TeamSpeak.ensureQueryIdentity({
+              progress: options.progress ?? "background",
+            }),
         ])
-
-        const nextQueryUser = selectedQueryUser ?? (await loadQueryUser())
 
         serverViewerCache.serverId = selectedServerKey
         serverViewerCache.channelList = nextChannels
@@ -779,7 +763,7 @@ export function ServerViewerPage() {
 
       return result.queryUser ?? {}
     },
-    [ensureSelectedServer, loadQueryUser, saveQueryUser, selectedServerKey],
+    [ensureSelectedServer, saveQueryUser, selectedServerKey],
   )
 
   const scheduleChannelTreeReload = useCallback(() => {
@@ -857,12 +841,14 @@ export function ServerViewerPage() {
             options.foreground || !canUseCache ? "foreground" : "background"
           const selectedQueryUser = await ensureSelectedServer(progress)
 
-          const [info, nextChannels, nextClients] = await Promise.all([
+          const [info, nextChannels, nextClients, nextQueryUser] = await Promise.all([
             TeamSpeak.execute<ServerInfo[]>("serverinfo", {}, [], { progress }),
             TeamSpeak.execute<ChannelRow[]>("channellist", {}, [], { progress }),
             TeamSpeak.execute<ClientRow[]>("clientlist", {}, ["-voice", "-away"], {
               progress,
             }),
+            selectedQueryUser ??
+              TeamSpeak.ensureQueryIdentity({ progress: "background" }),
           ])
 
           const nextServerInfo = info[0] ?? {}
@@ -871,7 +857,7 @@ export function ServerViewerPage() {
           serverViewerCache.serverInfo = nextServerInfo
           serverViewerCache.channelList = nextChannels
           serverViewerCache.clientList = nextClients
-          serverViewerCache.queryUser = selectedQueryUser
+          serverViewerCache.queryUser = nextQueryUser
           serverViewerCache.loaded = true
           serverViewerCache.lastLoadedAt = Date.now()
           writeServerViewerCache(serverViewerCache)
@@ -880,7 +866,7 @@ export function ServerViewerPage() {
             serverInfo: nextServerInfo,
             channelList: nextChannels,
             clientList: nextClients,
-            queryUser: selectedQueryUser,
+            queryUser: nextQueryUser,
           }
         })().finally(() => {
           serverViewerLoadFlights.delete(selectedServerKey)

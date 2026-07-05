@@ -48,7 +48,7 @@ export function ServerGroupPermissions() {
   const { queryUser, saveQueryUser, saveServerId, serverId } = useAuth()
   const queryUserRef = useRef(queryUser)
   const selectServerFlightRef = useRef<ReturnType<
-    typeof TeamSpeak.selectServer
+    typeof TeamSpeak.useServer
   > | null>(null)
   const { dismissToast, showError, toasts } = useToastStack()
   const [availablePermissions, setAvailablePermissions] = useState<
@@ -89,20 +89,26 @@ export function ServerGroupPermissions() {
     }
 
     if (!selectServerFlightRef.current) {
-      selectServerFlightRef.current = TeamSpeak.selectServer(
+      selectServerFlightRef.current = TeamSpeak.useServer(
         validSelectedServerId,
       ).finally(() => {
         selectServerFlightRef.current = null
       })
     }
 
-    const nextQueryUser = await selectServerFlightRef.current
+    await selectServerFlightRef.current
     saveServerId(validSelectedServerId)
-    if (nextQueryUser) {
-      queryUserRef.current = nextQueryUser
-      saveQueryUser(nextQueryUser)
-    }
-    return nextQueryUser
+
+    void TeamSpeak.ensureQueryIdentity({ progress: "background" })
+      .then((nextQueryUser) => {
+        if (nextQueryUser) {
+          queryUserRef.current = nextQueryUser
+          saveQueryUser(nextQueryUser)
+        }
+      })
+      .catch(() => undefined)
+
+    return queryUserRef.current
   }, [saveQueryUser, saveServerId, selectedServerId])
 
   const serverCacheKey = selectedServerId

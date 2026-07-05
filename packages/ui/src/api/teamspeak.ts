@@ -53,6 +53,10 @@ let connectFlight: Promise<{ token: string }> | null = null
 const autofillFlights = new Map<string, Promise<AutofillResponse>>()
 let activeServerId: string | undefined
 let activeServerQueryUser: QueryUser | undefined
+let connectionBootstrapped = false
+let connectionBootstrapFlight: Promise<unknown> | null = null
+let queryIdentityFlight: Promise<QueryUser | undefined> | null = null
+const useServerFlights = new Map<string, Promise<void>>()
 const selectServerFlights = new Map<string, Promise<QueryUser | undefined>>()
 const registerEventsFlights = new Map<string, Promise<unknown>>()
 const registeredEventServerIds = new Set<string>()
@@ -102,6 +106,10 @@ function ensureSocketConnected() {
 function resetTeamSpeakSessionState() {
   activeServerId = undefined
   activeServerQueryUser = undefined
+  connectionBootstrapped = false
+  connectionBootstrapFlight = null
+  queryIdentityFlight = null
+  useServerFlights.clear()
   selectServerFlights.clear()
   registerEventsFlights.clear()
   registeredEventServerIds.clear()
@@ -253,6 +261,105 @@ export const TeamSpeak = {
     return withProgress(() => flight, requestOptions.progress)
   },
 
+  bootstrapConnection(requestOptions: RequestOptions = {}) {
+    ensureSocketConnected()
+
+    if (connectionBootstrapped) {
+      return Promise.resolve(undefined)
+    }
+
+    if (!connectionBootstrapFlight) {
+      connectionBootstrapFlight = Promise.allSettled([
+        TeamSpeak.execute<QueryUser[]>("whoami", {}, [], { progress: "none" })
+          .then((userInfo) => {
+            if (userInfo[0]) {
+              activeServerQueryUser = userInfo[0]
+            }
+
+            return userInfo
+          }),
+        TeamSpeak.execute("version", {}, [], { progress: "none" }),
+      ])
+        .then((response) => {
+          connectionBootstrapped = true
+          return response
+        })
+        .finally(() => {
+          connectionBootstrapFlight = null
+        })
+    }
+
+    const flight = connectionBootstrapFlight
+
+    return withProgress(() => flight, requestOptions.progress)
+  },
+
+  async useServer(sid: string | number, requestOptions: RequestOptions = {}) {
+    const key = String(sid)
+
+    if (activeServerId === key) {
+      return Promise.resolve()
+    }
+
+    const existingFlight = useServerFlights.get(key)
+
+    if (existingFlight) {
+      return withProgress(() => existingFlight, requestOptions.progress)
+    }
+
+    const flight = TeamSpeak.execute("use", { sid }, [], { progress: "none" })
+      .then(() => {
+        if (activeServerId !== key) {
+          activeServerQueryUser = undefined
+          queryIdentityFlight = null
+          registerEventsFlights.clear()
+          registeredEventServerIds.clear()
+        }
+
+        activeServerId = key
+        void TeamSpeak.registerEvents({ progress: "none" }, key).catch(
+          () => undefined,
+        )
+      })
+      .finally(() => {
+        useServerFlights.delete(key)
+      })
+
+    useServerFlights.set(key, flight)
+
+    return withProgress(() => flight, requestOptions.progress)
+  },
+
+  ensureQueryIdentity(requestOptions: RequestOptions = {}) {
+    if (activeServerQueryUser) {
+      return Promise.resolve(activeServerQueryUser)
+    }
+
+    if (queryIdentityFlight) {
+      const flight = queryIdentityFlight
+
+      return withProgress(() => flight, requestOptions.progress)
+    }
+
+    queryIdentityFlight = TeamSpeak.execute<QueryUser[]>(
+      "whoami",
+      {},
+      [],
+      { progress: "none" },
+    )
+      .then((userInfo) => {
+        activeServerQueryUser = userInfo[0]
+        return activeServerQueryUser
+      })
+      .finally(() => {
+        queryIdentityFlight = null
+      })
+
+    const flight = queryIdentityFlight
+
+    return withProgress(() => flight, requestOptions.progress)
+  },
+
   async selectServer(sid: string | number, requestOptions: RequestOptions = {}) {
     const key = String(sid)
 
@@ -267,21 +374,8 @@ export const TeamSpeak = {
     }
 
     const flight = (async () => {
-      await TeamSpeak.execute("use", { sid }, [], { progress: "none" })
-      activeServerId = key
-
-      await TeamSpeak.registerEvents({ progress: "none" }, key)
-
-      const userInfo = await TeamSpeak.execute<QueryUser[]>(
-        "whoami",
-        {},
-        [],
-        { progress: "none" },
-      )
-
-      activeServerQueryUser = userInfo[0]
-
-      return activeServerQueryUser
+      await TeamSpeak.useServer(sid, { progress: "none" })
+      return TeamSpeak.ensureQueryIdentity({ progress: "none" })
     })().finally(() => {
       selectServerFlights.delete(key)
     })
