@@ -11,6 +11,7 @@ import { ClientBan } from "@/pages/client-ban"
 import { ClientEdit } from "@/pages/client-edit"
 import { ClientPermissions } from "@/pages/client-permissions"
 import { LoginPage } from "@/pages/login"
+import { Logs } from "@/pages/logs"
 import { LogoutPage } from "@/pages/logout"
 import { PlaceholderPage } from "@/pages/placeholder"
 import { ServerViewerPage } from "@/pages/server-viewer"
@@ -84,6 +85,7 @@ export function AppRoutes() {
         <Route element={<AppLayout />}>
           <Route path="/servers" element={<ServersPage />} />
           <Route path="/serverviewer" element={<ServerViewerPage />} />
+          <Route path="/logs" element={<Logs />} />
           <Route path="/chat" element={<Chat />} />
           <Route path="/chat/:cid" element={<Chat />} />
           <Route path="/channel/add" element={<ChannelForm mode="add" />} />
@@ -106,6 +108,7 @@ export function AppRoutes() {
               (route) =>
                 route.path !== "/servers" &&
                 route.path !== "/serverviewer" &&
+                route.path !== "/logs" &&
                 route.path !== "/chat" &&
                 route.path !== "/chat/:cid" &&
                 route.path !== "/channel/add" &&
