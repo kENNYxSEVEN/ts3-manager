@@ -173,12 +173,20 @@ export function PermissionPageFlow({
       }
     }
 
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeActionMenu()
+      }
+    }
+
     document.addEventListener("pointerdown", handlePointerDown)
+    document.addEventListener("keydown", handleKeyDown)
     window.addEventListener("resize", closeActionMenu)
     window.addEventListener("scroll", closeActionMenu, true)
 
     return () => {
       document.removeEventListener("pointerdown", handlePointerDown)
+      document.removeEventListener("keydown", handleKeyDown)
       window.removeEventListener("resize", closeActionMenu)
       window.removeEventListener("scroll", closeActionMenu, true)
     }

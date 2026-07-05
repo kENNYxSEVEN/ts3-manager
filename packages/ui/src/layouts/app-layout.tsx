@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { NavLink, Outlet, useLocation } from "react-router-dom"
 import {
   Ban,
@@ -14,12 +14,14 @@ import {
   Folder,
   KeyRound,
   LogOut,
+  Menu,
   MessageSquare,
   MonitorCog,
   ShieldCheck,
   TerminalSquare,
   User,
   Users,
+  X,
   type LucideIcon,
 } from "lucide-react"
 
@@ -100,9 +102,11 @@ function isActivePath(currentPath: string, itemPath: string) {
 function NavItemLink({
   item,
   compact = false,
+  onNavigate,
 }: {
   item: NavItem
   compact?: boolean
+  onNavigate?: () => void
 }) {
   const location = useLocation()
   const active = isActivePath(location.pathname, item.path)
@@ -118,7 +122,7 @@ function NavItemLink({
         active && "font-semibold",
       )}
     >
-      <NavLink to={item.path}>
+      <NavLink to={item.path} onClick={onNavigate}>
         <Icon className="size-4 shrink-0" />
         <span>{item.title}</span>
       </NavLink>
@@ -126,17 +130,27 @@ function NavItemLink({
   )
 }
 
-function NavigationSection({ items }: { items: NavItem[] }) {
+function NavigationSection({
+  items,
+  onNavigate,
+}: {
+  items: NavItem[]
+  onNavigate?: () => void
+}) {
   return (
     <div className="space-y-1">
       {items.map((item) => (
-        <NavItemLink item={item} key={item.path} />
+        <NavItemLink item={item} key={item.path} onNavigate={onNavigate} />
       ))}
     </div>
   )
 }
 
-function PermissionsNavigationSection() {
+function PermissionsNavigationSection({
+  onNavigate,
+}: {
+  onNavigate?: () => void
+}) {
   const location = useLocation()
   const isPermissionsRoute = location.pathname.startsWith("/permissions")
   const [open, setOpen] = useState(false)
@@ -165,7 +179,11 @@ function PermissionsNavigationSection() {
       {open ? (
         <div className="ml-4 space-y-1 border-l pl-2">
           {permissionNavigation.map((item) => (
-            <NavItemLink item={item} key={item.path} />
+            <NavItemLink
+              item={item}
+              key={item.path}
+              onNavigate={onNavigate}
+            />
           ))}
         </div>
       ) : null}
@@ -173,17 +191,21 @@ function PermissionsNavigationSection() {
   )
 }
 
-function Sidebar() {
+function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   return (
-    <aside className="hidden h-screen w-72 shrink-0 overflow-hidden border-r bg-card text-card-foreground lg:flex lg:flex-col">
-      <div className="flex h-16 shrink-0 items-center gap-2 px-5">
-        <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <Server className="size-4" />
-        </div>
-        <div>
-          <div className="text-base font-semibold leading-tight">TS3 Manager</div>
-          <div className="text-xs text-muted-foreground">
-            ServerQuery console
+    <div className="flex h-full w-72 flex-col border-r bg-card text-card-foreground">
+      <div className="flex h-16 shrink-0 items-center justify-between gap-2 px-5">
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+            <Server className="size-4" />
+          </div>
+          <div className="min-w-0">
+            <div className="truncate text-base font-semibold leading-tight">
+              TS3 Manager
+            </div>
+            <div className="truncate text-xs text-muted-foreground">
+              ServerQuery console
+            </div>
           </div>
         </div>
       </div>
@@ -192,51 +214,155 @@ function Sidebar() {
 
       <ScrollArea className="min-h-0 flex-1">
         <div className="px-3 py-3">
-          <NavigationSection items={mainNavigation} />
-          <PermissionsNavigationSection />
+          <NavigationSection items={mainNavigation} onNavigate={onNavigate} />
+          <PermissionsNavigationSection onNavigate={onNavigate} />
         </div>
       </ScrollArea>
 
       <div className="shrink-0 border-t p-3">
-        <NavItemLink item={{ title: "Logout", path: "/logout", icon: LogOut }} />
+        <NavItemLink
+          item={{ title: "Logout", path: "/logout", icon: LogOut }}
+          onNavigate={onNavigate}
+        />
+      </div>
+    </div>
+  )
+}
+
+function Sidebar({ open }: { open: boolean }) {
+  return (
+    <aside
+      aria-hidden={!open}
+      className={cn(
+        "hidden h-screen shrink-0 overflow-hidden transition-[width] duration-200 ease-in-out lg:block",
+        open ? "w-72" : "w-0",
+      )}
+    >
+      <div
+        className={cn(
+          "h-full w-72 transition-transform duration-200 ease-in-out will-change-transform",
+          open ? "translate-x-0" : "pointer-events-none -translate-x-full",
+        )}
+      >
+        <SidebarContent />
       </div>
     </aside>
   )
 }
 
-function MobileNavigation() {
+function MobileSidebar({
+  open,
+  onOpenChange,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  useEffect(() => {
+    if (!open) return
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onOpenChange(false)
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown)
+    return () => document.removeEventListener("keydown", handleKeyDown)
+  }, [onOpenChange, open])
+
   return (
-    <div className="shrink-0 border-b bg-background lg:hidden">
-      <ScrollArea className="w-full">
-        <div className="flex gap-1 px-3 py-2">
-          {[...mainNavigation, ...permissionNavigation].map((item) => (
-            <NavItemLink compact item={item} key={item.path} />
-          ))}
-          <NavItemLink
-            compact
-            item={{ title: "Logout", path: "/logout", icon: LogOut }}
-          />
-        </div>
-      </ScrollArea>
+    <div
+      aria-hidden={!open}
+      className={cn(
+        "fixed inset-0 z-50 lg:hidden",
+        open ? "pointer-events-auto" : "pointer-events-none",
+      )}
+    >
+      <div
+        className={cn(
+          "absolute inset-0 bg-background/70 transition-opacity duration-300 ease-in-out",
+          open ? "opacity-100" : "opacity-0",
+        )}
+        onClick={() => onOpenChange(false)}
+      />
+      <div
+        className={cn(
+          "relative h-full w-72 transition-transform duration-300 ease-in-out will-change-transform",
+          open ? "translate-x-0" : "-translate-x-full",
+        )}
+      >
+        <SidebarContent onNavigate={() => onOpenChange(false)} />
+        <Button
+          aria-label="Close sidebar"
+          className="absolute right-3 top-3"
+          size="icon"
+          type="button"
+          variant="ghost"
+          onClick={() => onOpenChange(false)}
+        >
+          <X className="size-4" />
+        </Button>
+      </div>
     </div>
   )
 }
 
 export function AppLayout() {
   const location = useLocation()
+  const [sidebarOpen, setSidebarOpen] = useState(() => {
+    if (typeof window === "undefined") {
+      return true
+    }
+
+    return window.localStorage.getItem("ts3-manager:sidebar-open") !== "false"
+  })
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
   const currentItem =
     [...mainNavigation, ...permissionNavigation].find((item) =>
       isActivePath(location.pathname, item.path),
     ) ?? mainNavigation[0]
 
+  useEffect(() => {
+    window.localStorage.setItem(
+      "ts3-manager:sidebar-open",
+      String(sidebarOpen),
+    )
+  }, [sidebarOpen])
+
+  useEffect(() => {
+    setMobileSidebarOpen(false)
+  }, [location.pathname])
+
   return (
     <div className="h-screen overflow-hidden bg-background text-foreground">
       <div className="flex h-screen min-h-0">
-        <Sidebar />
+        <Sidebar open={sidebarOpen} />
 
         <div className="flex h-screen min-w-0 flex-1 flex-col overflow-hidden">
           <header className="z-20 flex h-16 shrink-0 items-center justify-between border-b bg-background/95 px-4 backdrop-blur lg:px-6">
             <div className="flex min-w-0 items-center gap-3">
+              <Button
+                aria-label="Open sidebar"
+                className="inline-flex lg:hidden"
+                size="icon"
+                type="button"
+                variant="ghost"
+                onClick={() => setMobileSidebarOpen(true)}
+              >
+                <Menu className="size-4" />
+              </Button>
+
+              <Button
+                aria-label="Toggle sidebar"
+                className="hidden lg:inline-flex"
+                size="icon"
+                type="button"
+                variant="ghost"
+                onClick={() => setSidebarOpen((current) => !current)}
+              >
+                <Menu className="size-4" />
+              </Button>
+
               <div className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground lg:hidden">
                 <Server className="size-4" />
               </div>
@@ -251,9 +377,6 @@ export function AppLayout() {
                     {currentItem.title}
                   </span>
                 </div>
-                <p className="truncate text-xs text-muted-foreground">
-                  TeamSpeak ServerQuery management
-                </p>
               </div>
             </div>
 
@@ -263,13 +386,13 @@ export function AppLayout() {
             </div>
           </header>
 
-          <MobileNavigation />
-
           <main className="min-h-0 flex-1 overflow-y-auto p-4 lg:p-6">
             <Outlet />
           </main>
         </div>
       </div>
+
+      <MobileSidebar open={mobileSidebarOpen} onOpenChange={setMobileSidebarOpen} />
     </div>
   )
 }
