@@ -17,8 +17,8 @@ import {
 import { TeamSpeak } from "@/api/teamspeak"
 import { useAuth, type QueryUser } from "@/auth/auth-context"
 import { AppModal } from "@/components/app-modal"
+import { ClientStatusIcons } from "@/components/client-status-icons"
 import { ToastStack, useToastStack } from "@/components/toast-stack"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -531,8 +531,6 @@ function ChannelTreeItem({
   const paddingLeft = String(depth * 18 + 8) + "px"
 
   if (isClientTreeItem(item)) {
-    const away = item.clientAway === "1" || item.clientAway === 1
-
     return (
       <ClientActions client={item} onClientAction={onClientAction}>
         <button
@@ -541,8 +539,10 @@ function ChannelTreeItem({
           type="button"
         >
           <UserRound className="size-4 shrink-0 text-muted-foreground" />
-          <span className="min-w-0 flex-1 truncate">{item.clientNickname}</span>
-          {away ? <Badge variant="outline">away</Badge> : null}
+          <span className="flex min-w-0 flex-1 items-center">
+            <span className="min-w-0 truncate">{item.clientNickname}</span>
+            <ClientStatusIcons client={item} className="ml-1 shrink-0" />
+          </span>
         </button>
       </ClientActions>
     )

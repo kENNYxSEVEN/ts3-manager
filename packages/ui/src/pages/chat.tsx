@@ -5,12 +5,14 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type ReactNode,
 } from "react"
 import { useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { Hash, Send, UserRound, X } from "lucide-react"
 
 import { TeamSpeak } from "@/api/teamspeak"
 import { useAuth, type QueryUser } from "@/auth/auth-context"
+import { ClientStatusIcons } from "@/components/client-status-icons"
 import { ToastStack, useToastStack } from "@/components/toast-stack"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -180,7 +182,7 @@ function ChatTab({
   onClose,
 }: {
   active?: boolean
-  children: string
+  children: ReactNode
   onClick: () => void
   onClose?: () => void
 }) {
@@ -195,7 +197,9 @@ function ChatTab({
       type="button"
       onClick={onClick}
     >
-      <span className="truncate">{children}</span>
+      <span className="flex min-w-0 items-center justify-center truncate">
+        {children}
+      </span>
       {onClose ? (
         <span
           aria-label="Close private chat"
@@ -762,8 +766,14 @@ export function Chat() {
                       onClick={() => navigatePrivate(String(client.clid))}
                     >
                       <UserRound className="size-4 shrink-0 text-muted-foreground" />
-                      <span className="min-w-0 flex-1 truncate font-semibold">
-                        {client.clientNickname}
+                      <span className="flex min-w-0 flex-1 items-center font-semibold">
+                        <span className="min-w-0 truncate">
+                          {client.clientNickname}
+                        </span>
+                        <ClientStatusIcons
+                          client={client}
+                          className="ml-1 shrink-0"
+                        />
                       </span>
                     </button>
                   )
@@ -797,7 +807,15 @@ export function Chat() {
                   onClick={() => navigatePrivate()}
                   onClose={closePrivate}
                 >
-                  {privateTabLabel}
+                  <span className="flex min-w-0 items-center">
+                    <span className="min-w-0 truncate">{privateTabLabel}</span>
+                    {privateTabClient ? (
+                      <ClientStatusIcons
+                        client={privateTabClient}
+                        className="ml-1 shrink-0"
+                      />
+                    ) : null}
+                  </span>
                 </ChatTab>
               ) : null}
             </div>
