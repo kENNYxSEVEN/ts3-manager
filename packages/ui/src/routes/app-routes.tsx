@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from "react-router-dom"
 import { ProtectedRoute } from "@/auth/protected-route"
 import { AppLayout } from "@/layouts/app-layout"
 import { ApiKeys } from "@/pages/api-keys"
+import { Bans } from "@/pages/bans"
 import { ChannelForm } from "@/pages/channel-form"
 import { ChannelClientPermissions } from "@/pages/channel-client-permissions"
 import { ChannelGroupPermissions } from "@/pages/channel-group-permissions"
@@ -102,6 +103,7 @@ export function AppRoutes() {
           <Route path="/console" element={<Console />} />
           <Route path="/tokens" element={<Tokens />} />
           <Route path="/apikeys" element={<ApiKeys />} />
+          <Route path="/bans" element={<Bans />} />
           <Route path="/channel/add" element={<ChannelForm mode="add" />} />
           <Route path="/channel/:cid/edit" element={<ChannelForm mode="edit" />} />
           <Route path="/client/:cldbid/ban" element={<ClientBan />} />
@@ -132,6 +134,7 @@ export function AppRoutes() {
                 route.path !== "/console" &&
                 route.path !== "/tokens" &&
                 route.path !== "/apikeys" &&
+                route.path !== "/bans" &&
                 route.path !== "/channel/add" &&
                 route.path !== "/channel/:cid/edit" &&
                 route.path !== "/client/:cldbid/ban" &&
