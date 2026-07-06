@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom"
 
 import { TeamSpeak } from "@/api/teamspeak"
 import { useAuth } from "@/auth/auth-context"
-import { AppModal } from "@/components/app-modal"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { ToastStack, useToastStack } from "@/components/toast-stack"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -55,9 +55,9 @@ export function LoginPage() {
     setLoggedOut,
     setRememberLogin,
   } = useAuth()
+  const { dismissToast, showError, toasts } = useToastStack()
   const [form, setForm] = useState<LoginForm>(defaultForm)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     setLoggedOut(true)
@@ -93,13 +93,13 @@ export function LoginPage() {
         }
 
         removeToken()
-        setError(getErrorMessage(autofillError))
+        showError(getErrorMessage(autofillError))
       })
 
     return () => {
       active = false
     }
-  }, [connected, navigate, removeToken, setLoggedOut, token])
+  }, [connected, navigate, removeToken, setLoggedOut, showError, token])
 
   const updateField = <Key extends keyof LoginForm>(
     key: Key,
@@ -122,7 +122,6 @@ export function LoginPage() {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setLoading(true)
-    setError(null)
 
     try {
       const response = await TeamSpeak.connect({
@@ -141,16 +140,15 @@ export function LoginPage() {
       )
       navigate("/servers", { state: { from: "/login" } })
     } catch (connectError) {
-      setError(getErrorMessage(connectError))
+      showError(getErrorMessage(connectError))
     } finally {
       setLoading(false)
     }
   }
 
-  const closeErrorModal = () => setError(null)
-
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
       <header className="flex h-14 shrink-0 items-center justify-between border-b bg-background/95 px-4 backdrop-blur lg:px-6">
         <div />
 
@@ -242,20 +240,6 @@ export function LoginPage() {
         </Card>
       </main>
 
-      <AppModal
-        open={Boolean(error)}
-        title="Connection error"
-        onClose={closeErrorModal}
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-muted-foreground">{error}</p>
-          <div className="flex justify-end">
-            <Button type="button" onClick={closeErrorModal}>
-              OK
-            </Button>
-          </div>
-        </div>
-      </AppModal>
     </div>
   )
 }
