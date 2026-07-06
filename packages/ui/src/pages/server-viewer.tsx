@@ -1245,7 +1245,7 @@ export function ServerViewerPage() {
             </CardTitle>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <Button asChild size="sm" variant="outline">
+            <Button asChild size="sm">
               <Link to="/channel/add">
                 <Plus className="size-4" />
                 Add Channel
