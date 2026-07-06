@@ -23,6 +23,13 @@ type QueryUser = {
   [key: string]: unknown
 }
 
+type SnapshotDeployPayload = Blob | string
+
+type SnapshotCreateResponse = Array<{
+  data?: string
+  [key: string]: unknown
+}>
+
 type TeamSpeakError = {
   id?: string | number
   message?: string
@@ -218,6 +225,39 @@ export const TeamSpeak = {
             },
             (response: T | TeamSpeakError) =>
               handleResponse<T>(response, resolve, reject),
+          )
+        }),
+      requestOptions.progress,
+    )
+  },
+
+  createSnapshot(requestOptions: RequestOptions = {}) {
+    ensureSocketConnected()
+
+    return withProgress(
+      () =>
+        new Promise<SnapshotCreateResponse | []>((resolve, reject) => {
+          socket.emit(
+            "teamspeak-createsnapshot",
+            (response: SnapshotCreateResponse | TeamSpeakError) =>
+              handleResponse<SnapshotCreateResponse>(response, resolve, reject),
+          )
+        }),
+      requestOptions.progress,
+    )
+  },
+
+  deploySnapshot(snapshot: SnapshotDeployPayload, requestOptions: RequestOptions = {}) {
+    ensureSocketConnected()
+
+    return withProgress(
+      () =>
+        new Promise<unknown>((resolve, reject) => {
+          socket.emit(
+            "teamspeak-deploysnapshot",
+            snapshot,
+            (response: unknown | TeamSpeakError) =>
+              handleResponse<unknown>(response, resolve, reject),
           )
         }),
       requestOptions.progress,
