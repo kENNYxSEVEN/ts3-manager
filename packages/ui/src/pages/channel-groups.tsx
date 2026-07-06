@@ -34,10 +34,16 @@ import {
   TableRow,
 } from "@/components/ui/table"
 
-type ServerGroupRow = {
+type ChannelGroupRow = {
+  cgid: string | number
   name?: string | null
-  sgid: string | number
   type: string | number
+  [key: string]: unknown
+}
+
+type ChannelRow = {
+  channelName?: string | null
+  cid: string | number
   [key: string]: unknown
 }
 
@@ -53,16 +59,17 @@ type GroupMemberRow = {
   [key: string]: unknown
 }
 
-type CreateServerGroupForm = {
+type CreateChannelGroupForm = {
   name: string
   type: string
 }
 
-type EditServerGroupForm = {
+type EditChannelGroupForm = {
   name: string
+  selectedChannel: string
 }
 
-type CopyServerGroupForm = {
+type CopyChannelGroupForm = {
   overwrite: boolean
   targetGroupId: string
   targetGroupName: string
@@ -97,23 +104,32 @@ function isUsableServerId(value: string | number | undefined | null) {
   )
 }
 
-
-
 function getNumberValue(value: string | number | undefined) {
   const numericValue = Number(value)
 
   return Number.isFinite(numericValue) ? numericValue : 0
 }
 
-function getGroupName(group: ServerGroupRow) {
-  return group.name || `Group ${String(group.sgid)}`
+function getChannelGroupName(group: ChannelGroupRow) {
+  return group.name || `Group ${String(group.cgid)}`
 }
 
-function getGroupTypeValue(group: ServerGroupRow) {
+function getGroupTypeValue(group: ChannelGroupRow) {
   return Number(group.type)
 }
 
-
+function getGroupTypeRank(type: string | number) {
+  switch (Number(type)) {
+    case 1:
+      return 0
+    case 0:
+      return 1
+    case 2:
+      return 2
+    default:
+      return 3
+  }
+}
 
 function getGroupSectionLabel(type: string | number) {
   switch (Number(type)) {
@@ -142,8 +158,8 @@ async function fullClientDBList() {
 
     try {
       nextClients = await TeamSpeak.execute<ClientDbRow[]>("clientdblist", {
-        start,
         duration,
+        start,
       })
     } catch (error) {
       if (isDatabaseEmptyResult(error)) {
@@ -165,21 +181,24 @@ async function fullClientDBList() {
   return clients
 }
 
-function createGroupedOptions(groups: ServerGroupRow[]): AppSelectGroup[] {
+function createGroupedOptions(groups: ChannelGroupRow[]): AppSelectGroup[] {
   return [1, 0, 2]
     .map((type) => ({
       label: getGroupSectionLabel(type),
       options: groups
         .filter((group) => getGroupTypeValue(group) === type)
+        .sort((firstGroup, secondGroup) =>
+          getNumberValue(firstGroup.cgid) - getNumberValue(secondGroup.cgid),
+        )
         .map((group) => ({
-          label: `${getGroupName(group)} (${String(group.sgid)})`,
-          value: String(group.sgid),
+          label: `${getChannelGroupName(group)} (${String(group.cgid)})`,
+          value: String(group.cgid),
         })),
     }))
     .filter((group) => group.options.length > 0)
 }
 
-export function ServerGroups() {
+export function ChannelGroups() {
   const { queryUser, saveQueryUser, saveServerId, serverId } = useAuth()
   const queryUserRef = useRef(queryUser)
   const selectServerFlightRef = useRef<ReturnType<
@@ -187,15 +206,19 @@ export function ServerGroups() {
   > | null>(null)
   const loadGroupsFlightRef = useRef<Promise<void> | null>(null)
   const { dismissToast, showError, showSuccess, toasts } = useToastStack()
-  const [groups, setGroups] = useState<ServerGroupRow[]>([])
+  const [groups, setGroups] = useState<ChannelGroupRow[]>([])
+  const [channels, setChannels] = useState<ChannelRow[]>([])
   const [clients, setClients] = useState<ClientDbRow[]>([])
   const [editMembers, setEditMembers] = useState<GroupMemberRow[]>([])
   const [initialEditMembers, setInitialEditMembers] = useState<GroupMemberRow[]>(
     [],
   )
-  const [groupToEdit, setGroupToEdit] = useState<ServerGroupRow | null>(null)
-  const [groupToCopy, setGroupToCopy] = useState<ServerGroupRow | null>(null)
-  const [groupToDelete, setGroupToDelete] = useState<ServerGroupRow | null>(null)
+  const [defaultChannelGroupId, setDefaultChannelGroupId] = useState<
+    string | number | undefined
+  >(undefined)
+  const [groupToEdit, setGroupToEdit] = useState<ChannelGroupRow | null>(null)
+  const [groupToCopy, setGroupToCopy] = useState<ChannelGroupRow | null>(null)
+  const [groupToDelete, setGroupToDelete] = useState<ChannelGroupRow | null>(null)
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [copyDialogOpen, setCopyDialogOpen] = useState(false)
@@ -203,12 +226,16 @@ export function ServerGroups() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [editLoading, setEditLoading] = useState(false)
-  const [createForm, setCreateForm] = useState<CreateServerGroupForm>({
+  const [memberLoading, setMemberLoading] = useState(false)
+  const [createForm, setCreateForm] = useState<CreateChannelGroupForm>({
     name: "",
     type: "1",
   })
-  const [editForm, setEditForm] = useState<EditServerGroupForm>({ name: "" })
-  const [copyForm, setCopyForm] = useState<CopyServerGroupForm>({
+  const [editForm, setEditForm] = useState<EditChannelGroupForm>({
+    name: "",
+    selectedChannel: "",
+  })
+  const [copyForm, setCopyForm] = useState<CopyChannelGroupForm>({
     overwrite: false,
     targetGroupId: "",
     targetGroupName: "",
@@ -245,12 +272,32 @@ export function ServerGroups() {
     return undefined
   }, [queryUser.virtualserverId, serverId])
 
-
   const groupedGroupOptions = useMemo(() => createGroupedOptions(groups), [groups])
 
   const selectedTargetGroup = useMemo(
-    () => groups.find((group) => String(group.sgid) === copyForm.targetGroupId),
+    () => groups.find((group) => String(group.cgid) === copyForm.targetGroupId),
     [copyForm.targetGroupId, groups],
+  )
+
+  const channelOptions = useMemo(
+    () =>
+      channels.map((channel) => ({
+        label: channel.channelName || `Channel ${String(channel.cid)}`,
+        value: String(channel.cid),
+      })),
+    [channels],
+  )
+
+  const sortedGroups = useMemo(
+    () =>
+      [...groups].sort((firstGroup, secondGroup) => {
+        const typeDiff =
+          getGroupTypeRank(firstGroup.type) - getGroupTypeRank(secondGroup.type)
+        if (typeDiff !== 0) return typeDiff
+
+        return getNumberValue(firstGroup.cgid) - getNumberValue(secondGroup.cgid)
+      }),
+    [groups],
   )
 
   const memberIdSet = useMemo(
@@ -281,29 +328,6 @@ export function ServerGroups() {
       return getClientLabel(client).toLowerCase().includes(normalizedFilter)
     })
   }, [availableClientFilter, clients, memberIdSet])
-
-  const sortedGroups = useMemo(
-    () =>
-      [...groups].sort((firstGroup, secondGroup) => {
-        const order = [1, 0, 2]
-        const firstTypeIndex = order.indexOf(getGroupTypeValue(firstGroup))
-        const secondTypeIndex = order.indexOf(getGroupTypeValue(secondGroup))
-        const firstGroupRank = firstTypeIndex === -1 ? order.length : firstTypeIndex
-        const secondGroupRank = secondTypeIndex === -1 ? order.length : secondTypeIndex
-        const typeDiff = firstGroupRank - secondGroupRank
-
-        if (typeDiff !== 0) {
-          return typeDiff
-        }
-
-        return getNumberValue(firstGroup.sgid) - getNumberValue(secondGroup.sgid)
-      }),
-    [groups],
-  )
-
-  const visibleGroups = sortedGroups
-
-
 
   const ensureSelectedServer = useCallback(async () => {
     if (!isUsableServerId(selectedServerId)) {
@@ -352,8 +376,8 @@ export function ServerGroups() {
           await ensureSelectedServer()
 
           try {
-            const groupList = await TeamSpeak.execute<ServerGroupRow[]>(
-              "servergrouplist",
+            const groupList = await TeamSpeak.execute<ChannelGroupRow[]>(
+              "channelgrouplist",
               {},
               [],
               { progress },
@@ -411,9 +435,43 @@ export function ServerGroups() {
     resetCreateForm()
   }
 
-  const openEditDialog = async (group: ServerGroupRow) => {
+  const loadChannelMembers = useCallback(
+    async (channelId: string, groupId: string | number) => {
+      if (!channelId) {
+        setEditMembers([])
+        setInitialEditMembers([])
+        return
+      }
+
+      setMemberLoading(true)
+
+      try {
+        await ensureSelectedServer()
+        const groupMembers = await TeamSpeak.execute<GroupMemberRow[]>(
+          "channelgroupclientlist",
+          {
+            cgid: groupId,
+            cid: channelId,
+          },
+        ).catch((error: unknown) => {
+          if (isDatabaseEmptyResult(error)) return []
+          throw error
+        })
+
+        setEditMembers(Array.isArray(groupMembers) ? groupMembers : [])
+        setInitialEditMembers(Array.isArray(groupMembers) ? groupMembers : [])
+      } catch (error) {
+        showError(getErrorMessage(error))
+      } finally {
+        setMemberLoading(false)
+      }
+    },
+    [ensureSelectedServer, showError],
+  )
+
+  const openEditDialog = async (group: ChannelGroupRow) => {
     setGroupToEdit(group)
-    setEditForm({ name: getGroupName(group) })
+    setEditForm({ name: getChannelGroupName(group), selectedChannel: "" })
     setEditMembers([])
     setInitialEditMembers([])
     setMemberFilter("")
@@ -423,19 +481,17 @@ export function ServerGroups() {
 
     try {
       await ensureSelectedServer()
-      const [clientList, groupMembers] = await Promise.all([
+      const [serverInfo, channelList, clientList] = await Promise.all([
+        TeamSpeak.execute<Array<{ virtualserverDefaultChannelGroup?: string | number }>>(
+          "serverinfo",
+        ),
+        TeamSpeak.execute<ChannelRow[]>("channellist"),
         fullClientDBList(),
-        TeamSpeak.execute<GroupMemberRow[]>("servergroupclientlist", {
-          sgid: group.sgid,
-        }).catch((error: unknown) => {
-          if (isDatabaseEmptyResult(error)) return []
-          throw error
-        }),
       ])
 
+      setDefaultChannelGroupId(serverInfo[0]?.virtualserverDefaultChannelGroup)
+      setChannels(Array.isArray(channelList) ? channelList : [])
       setClients(clientList)
-      setEditMembers(Array.isArray(groupMembers) ? groupMembers : [])
-      setInitialEditMembers(Array.isArray(groupMembers) ? groupMembers : [])
     } catch (error) {
       showError(getErrorMessage(error))
     } finally {
@@ -447,12 +503,12 @@ export function ServerGroups() {
     if (submitting) return
     setEditDialogOpen(false)
     setGroupToEdit(null)
-    setEditForm({ name: "" })
+    setEditForm({ name: "", selectedChannel: "" })
     setEditMembers([])
     setInitialEditMembers([])
   }
 
-  const openCopyDialog = (group: ServerGroupRow) => {
+  const openCopyDialog = (group: ChannelGroupRow) => {
     setGroupToCopy(group)
     setCopyForm({
       overwrite: false,
@@ -469,7 +525,7 @@ export function ServerGroups() {
     setGroupToCopy(null)
   }
 
-  const openDeleteDialog = (group: ServerGroupRow) => {
+  const openDeleteDialog = (group: ChannelGroupRow) => {
     setGroupToDelete(group)
     setForceDeletion(false)
     setDeleteDialogOpen(true)
@@ -493,12 +549,12 @@ export function ServerGroups() {
 
     try {
       await ensureSelectedServer()
-      await TeamSpeak.execute("servergroupadd", {
+      await TeamSpeak.execute("channelgroupadd", {
         name,
         type: Number(createForm.type),
       })
 
-      showSuccess("Server group created")
+      showSuccess("Channel group created")
       setAddDialogOpen(false)
       resetCreateForm()
       await loadGroups("background")
@@ -526,39 +582,45 @@ export function ServerGroups() {
     try {
       await ensureSelectedServer()
 
-      if (name !== getGroupName(groupToEdit)) {
-        await TeamSpeak.execute("servergrouprename", {
+      if (name !== getChannelGroupName(groupToEdit)) {
+        await TeamSpeak.execute("channelgrouprename", {
+          cgid: groupToEdit.cgid,
           name,
-          sgid: groupToEdit.sgid,
         })
       }
 
-      const nextMemberIds = new Set(editMembers.map((member) => String(member.cldbid)))
-      const previousMemberIds = new Set(
-        initialEditMembers.map((member) => String(member.cldbid)),
-      )
-      const membersToRemove = initialEditMembers.filter(
-        (member) => !nextMemberIds.has(String(member.cldbid)),
-      )
-      const membersToAdd = editMembers.filter(
-        (member) => !previousMemberIds.has(String(member.cldbid)),
-      )
+      if (editForm.selectedChannel) {
+        const nextMemberIds = new Set(
+          editMembers.map((member) => String(member.cldbid)),
+        )
+        const previousMemberIds = new Set(
+          initialEditMembers.map((member) => String(member.cldbid)),
+        )
+        const membersToRemove = initialEditMembers.filter(
+          (member) => !nextMemberIds.has(String(member.cldbid)),
+        )
+        const membersToAdd = editMembers.filter(
+          (member) => !previousMemberIds.has(String(member.cldbid)),
+        )
 
-      for (const member of membersToRemove) {
-        await TeamSpeak.execute("servergroupdelclient", {
-          cldbid: member.cldbid,
-          sgid: groupToEdit.sgid,
-        })
+        for (const member of membersToRemove) {
+          await TeamSpeak.execute("setclientchannelgroup", {
+            cgid: defaultChannelGroupId,
+            cid: editForm.selectedChannel,
+            cldbid: member.cldbid,
+          })
+        }
+
+        for (const member of membersToAdd) {
+          await TeamSpeak.execute("setclientchannelgroup", {
+            cgid: groupToEdit.cgid,
+            cid: editForm.selectedChannel,
+            cldbid: member.cldbid,
+          })
+        }
       }
 
-      for (const member of membersToAdd) {
-        await TeamSpeak.execute("servergroupaddclient", {
-          cldbid: member.cldbid,
-          sgid: groupToEdit.sgid,
-        })
-      }
-
-      showSuccess("Server group updated")
+      showSuccess("Channel group updated")
       setEditDialogOpen(false)
       setGroupToEdit(null)
       await loadGroups("background")
@@ -585,14 +647,14 @@ export function ServerGroups() {
 
     try {
       await ensureSelectedServer()
-      await TeamSpeak.execute("servergroupcopy", {
+      await TeamSpeak.execute("channelgroupcopy", {
         name,
-        ssgid: groupToCopy.sgid,
-        tsgid: copyForm.overwrite && selectedTargetGroup ? selectedTargetGroup.sgid : 0,
+        scgid: groupToCopy.cgid,
+        tcgid: copyForm.overwrite && selectedTargetGroup ? selectedTargetGroup.cgid : 0,
         type: Number(copyForm.targetGroupType),
       })
 
-      showSuccess("Server group copied")
+      showSuccess("Channel group copied")
       setCopyDialogOpen(false)
       setGroupToCopy(null)
       await loadGroups("background")
@@ -613,12 +675,12 @@ export function ServerGroups() {
 
     try {
       await ensureSelectedServer()
-      await TeamSpeak.execute("servergroupdel", {
+      await TeamSpeak.execute("channelgroupdel", {
+        cgid: groupToDelete.cgid,
         force: forceDeletion ? 1 : 0,
-        sgid: groupToDelete.sgid,
       })
 
-      showSuccess("Server group deleted")
+      showSuccess("Channel group deleted")
       setDeleteDialogOpen(false)
       setGroupToDelete(null)
       setForceDeletion(false)
@@ -676,13 +738,13 @@ export function ServerGroups() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <Button type="button" onClick={() => setAddDialogOpen(true)}>
               <Plus className="size-4" />
-              Add Server Group
+              Add Channel Group
             </Button>
           </div>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto px-6 pb-2">
-            <Table className="w-full min-w-[620px]">
+            <Table className="w-full min-w-[520px]">
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="w-10" />
@@ -701,14 +763,14 @@ export function ServerGroups() {
                     </TableCell>
                   </TableRow>
                 ) : groups.length ? (
-                  visibleGroups.map((group, index) => {
-                    const previousGroup = visibleGroups[index - 1]
+                  sortedGroups.map((group, index) => {
+                    const previousGroup = sortedGroups[index - 1]
                     const showSection =
                       !previousGroup ||
                       getGroupTypeValue(previousGroup) !== getGroupTypeValue(group)
 
                     return (
-                      <Fragment key={String(group.sgid)}>
+                      <Fragment key={String(group.cgid)}>
                         {showSection ? (
                           <TableRow>
                             <TableCell
@@ -730,7 +792,7 @@ export function ServerGroups() {
                                 >
                                   <MoreVertical className="size-4" />
                                   <span className="sr-only">
-                                    Open server group actions
+                                    Open channel group actions
                                   </span>
                                 </Button>
                               </DropdownMenuTrigger>
@@ -752,11 +814,11 @@ export function ServerGroups() {
                           </TableCell>
                           <TableCell
                             className="max-w-[22rem] truncate font-medium"
-                            title={getGroupName(group)}
+                            title={getChannelGroupName(group)}
                           >
-                            {getGroupName(group)}
+                            {getChannelGroupName(group)}
                           </TableCell>
-                          <TableCell>{group.sgid}</TableCell>
+                          <TableCell>{group.cgid}</TableCell>
                         </TableRow>
                       </Fragment>
                     )
@@ -767,7 +829,7 @@ export function ServerGroups() {
                       className="h-32 text-center text-muted-foreground"
                       colSpan={3}
                     >
-                      No server groups found.
+                      No channel groups found.
                     </TableCell>
                   </TableRow>
                 )}
@@ -804,9 +866,9 @@ export function ServerGroups() {
       >
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="server-group-name">Group Name</Label>
+            <Label htmlFor="channel-group-name">Group Name</Label>
             <Input
-              id="server-group-name"
+              id="channel-group-name"
               disabled={submitting}
               value={createForm.name}
               onChange={(event) =>
@@ -835,7 +897,7 @@ export function ServerGroups() {
         className="max-w-3xl"
         open={editDialogOpen}
         preventClose={submitting}
-        title="Edit Server Group"
+        title="Channel Group Edit"
         footer={
           <>
             <Button
@@ -843,7 +905,7 @@ export function ServerGroups() {
               type="button"
               onClick={saveGroup}
             >
-              {submitting ? "Saving..." : "Save"}
+              {submitting ? "Saving..." : "OK"}
             </Button>
             <Button
               disabled={submitting}
@@ -859,9 +921,9 @@ export function ServerGroups() {
       >
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="edit-server-group-name">Name</Label>
+            <Label htmlFor="edit-channel-group-name">Channel Group Name</Label>
             <Input
-              id="edit-server-group-name"
+              id="edit-channel-group-name"
               disabled={submitting || editLoading}
               value={editForm.name}
               onChange={(event) =>
@@ -873,27 +935,48 @@ export function ServerGroups() {
             />
           </div>
 
+          <div className="space-y-2">
+            <Label>Channel</Label>
+            <AppSelect
+              disabled={submitting || editLoading}
+              options={channelOptions}
+              placeholder="Select channel"
+              value={editForm.selectedChannel}
+              onChange={(value) => {
+                setEditForm((currentForm) => ({
+                  ...currentForm,
+                  selectedChannel: value,
+                }))
+                if (groupToEdit) {
+                  void loadChannelMembers(value, groupToEdit.cgid)
+                }
+              }}
+            />
+          </div>
+
           <div className="rounded-md border p-4">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <div>
-                <div className="text-sm font-medium pb-3">Members</div>
-              </div>
+            <div className="mb-3">
+              <div className="text-sm font-medium pb-3">Members</div>
             </div>
 
-            {editLoading ? (
+            {editLoading || memberLoading ? (
               <div className="py-8 text-center text-sm text-muted-foreground">
                 ...loading
               </div>
+            ) : !editForm.selectedChannel ? (
+              <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                Member editing is disabled until a channel is selected.
+              </div>
             ) : groupToEdit && getGroupTypeValue(groupToEdit) !== 1 ? (
               <div className="space-y-2">
-                <div className="text-sm text-muted-foreground">
+                <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
                   Member editing is disabled for this group type.
                 </div>
-                <div className="max-h-64 space-y-1 overflow-y-auto rounded-md border border-dashed p-2">
+                <div className="max-h-64 space-y-1 overflow-y-auto rounded-md border p-2">
                   {memberClients.length ? (
                     memberClients.map((client) => (
                       <label
-                        className="flex cursor-not-allowed items-start gap-2 rounded px-2 py-1.5 text-sm opacity-60"
+                        className="flex cursor-not-allowed items-start gap-2 rounded px-2 py-1.5 text-sm opacity-70"
                         key={String(client.cldbid)}
                       >
                         <Checkbox checked disabled />
@@ -917,9 +1000,9 @@ export function ServerGroups() {
             ) : (
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="server-group-member-filter">Current members</Label>
+                  <Label htmlFor="channel-group-member-filter">Current members</Label>
                   <Input
-                    id="server-group-member-filter"
+                    id="channel-group-member-filter"
                     disabled={submitting}
                     placeholder="Search members"
                     value={memberFilter}
@@ -958,9 +1041,11 @@ export function ServerGroups() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="server-group-available-filter">Available clients</Label>
+                  <Label htmlFor="channel-group-available-filter">
+                    Available clients
+                  </Label>
                   <Input
-                    id="server-group-available-filter"
+                    id="channel-group-available-filter"
                     disabled={submitting}
                     placeholder="Search clients"
                     value={availableClientFilter}
@@ -1035,7 +1120,11 @@ export function ServerGroups() {
             <Label>Copy Group</Label>
             <Input
               disabled
-              value={groupToCopy ? `${getGroupName(groupToCopy)} (${groupToCopy.sgid})` : ""}
+              value={
+                groupToCopy
+                  ? `${getChannelGroupName(groupToCopy)} (${groupToCopy.cgid})`
+                  : ""
+              }
             />
           </div>
           <label className="flex items-center gap-2 text-sm">
@@ -1050,12 +1139,14 @@ export function ServerGroups() {
                   return {
                     ...currentForm,
                     overwrite,
-                    targetGroupName: overwrite && nextTarget
-                      ? getGroupName(nextTarget)
-                      : currentForm.targetGroupName,
-                    targetGroupType: overwrite && nextTarget
-                      ? String(nextTarget.type)
-                      : currentForm.targetGroupType,
+                    targetGroupName:
+                      overwrite && nextTarget
+                        ? getChannelGroupName(nextTarget)
+                        : currentForm.targetGroupName,
+                    targetGroupType:
+                      overwrite && nextTarget
+                        ? String(nextTarget.type)
+                        : currentForm.targetGroupType,
                   }
                 })
               }
@@ -1071,21 +1162,27 @@ export function ServerGroups() {
               value={copyForm.targetGroupId}
               onChange={(value) => {
                 const group = groups.find(
-                  (currentGroup) => String(currentGroup.sgid) === value,
+                  (currentGroup) => String(currentGroup.cgid) === value,
                 )
                 setCopyForm((currentForm) => ({
                   ...currentForm,
                   targetGroupId: value,
-                  targetGroupName: group ? getGroupName(group) : currentForm.targetGroupName,
-                  targetGroupType: group ? String(group.type) : currentForm.targetGroupType,
+                  targetGroupName: group
+                    ? getChannelGroupName(group)
+                    : currentForm.targetGroupName,
+                  targetGroupType: group
+                    ? String(group.type)
+                    : currentForm.targetGroupType,
                 }))
               }}
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="copy-target-name">Target Group Name</Label>
+            <Label htmlFor="copy-channel-group-target-name">
+              Target Group Name
+            </Label>
             <Input
-              id="copy-target-name"
+              id="copy-channel-group-target-name"
               disabled={submitting || copyForm.overwrite}
               value={copyForm.targetGroupName}
               onChange={(event) =>
@@ -1143,7 +1240,7 @@ export function ServerGroups() {
           <p className="text-sm text-muted-foreground">
             Please confirm deleting the group{" "}
             <span className="font-semibold text-foreground">
-              {groupToDelete ? getGroupName(groupToDelete) : ""}
+              {groupToDelete ? getChannelGroupName(groupToDelete) : ""}
             </span>
           </p>
           <label className="flex items-center gap-2 text-sm">

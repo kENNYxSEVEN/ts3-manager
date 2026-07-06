@@ -7,6 +7,7 @@ import { Bans } from "@/pages/bans"
 import { ChannelForm } from "@/pages/channel-form"
 import { ChannelClientPermissions } from "@/pages/channel-client-permissions"
 import { ChannelGroupPermissions } from "@/pages/channel-group-permissions"
+import { ChannelGroups } from "@/pages/channel-groups"
 import { ChannelPermissions } from "@/pages/channel-permissions"
 import { Chat } from "@/pages/chat"
 import { ClientBan } from "@/pages/client-ban"
@@ -61,7 +62,6 @@ const protectedRoutes: MappedRoute[] = [
   { path: "/client/:clid/edit", title: "Edit Client" },
   { path: "/servergroups", title: "Server Groups" },
   { path: "/channelgroups", title: "Channel Groups" },
-  { path: "/channelgroup/:cgid/edit", title: "Edit Channel Group" },
   { path: "/channel/:cid/edit", title: "Edit Channel" },
   { path: "/channel/add", title: "Add Channel" },
   { path: "/spacer/add", title: "Add Spacer" },
@@ -113,6 +113,7 @@ export function AppRoutes() {
           <Route path="/client/:cldbid/ban" element={<ClientBan />} />
           <Route path="/client/:clid/edit" element={<ClientEdit />} />
           <Route path="/servergroups" element={<ServerGroups />} />
+          <Route path="/channelgroups" element={<ChannelGroups />} />
           <Route path="/spacer/add" element={<SpacerAdd />} />
           <Route path="/permissions/client" element={<ClientPermissions />} />
           <Route path="/permissions/client/:cldbid" element={<ClientPermissions />} />
@@ -147,6 +148,7 @@ export function AppRoutes() {
                 route.path !== "/client/:cldbid/ban" &&
                 route.path !== "/client/:clid/edit" &&
                 route.path !== "/servergroups" &&
+                route.path !== "/channelgroups" &&
                 route.path !== "/spacer/add" &&
                 route.path !== "/permissions/client" &&
                 route.path !== "/permissions/client/:cldbid" &&
