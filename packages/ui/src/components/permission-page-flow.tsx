@@ -50,8 +50,13 @@ type PermissionSelector = {
   groups?: AppSelectGroup[]
   label: string
   options?: SelectorOption[]
+  searchable?: boolean
   value: string
   onChange: (value: string) => void
+}
+
+type SearchableSelectorOption = SelectorOption & {
+  groupLabel?: string
 }
 
 const rowsPerPageOptions = [50, 100, 150, "all"] as const
@@ -98,6 +103,174 @@ function mergePermissions(
   )
 
   return [...mergedPermissions, ...missingGrantedPermissions]
+}
+
+function getSelectorOptions(selector: PermissionSelector) {
+  const options: SearchableSelectorOption[] = []
+
+  selector.groups?.forEach((group) => {
+    group.options.forEach((option) => {
+      options.push({ ...option, groupLabel: group.label })
+    })
+  })
+
+  selector.options?.forEach((option) => options.push(option))
+
+  return options
+}
+
+function SearchablePermissionSelector({
+  busy,
+  selector,
+}: {
+  busy: boolean
+  selector: PermissionSelector
+}) {
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const options = useMemo(() => getSelectorOptions(selector), [selector])
+  const selectedOption = useMemo(
+    () => options.find((option) => option.value === selector.value),
+    [options, selector.value],
+  )
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState(selectedOption?.label ?? "")
+  const [filtering, setFiltering] = useState(false)
+
+  useEffect(() => {
+    if (!open) {
+      setQuery(selectedOption?.label ?? "")
+      setFiltering(false)
+    }
+  }, [open, selectedOption?.label])
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (
+        rootRef.current &&
+        event.target instanceof Node &&
+        !rootRef.current.contains(event.target)
+      ) {
+        setOpen(false)
+      }
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false)
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown)
+    document.addEventListener("keydown", handleKeyDown)
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown)
+      document.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [open])
+
+  const filteredOptions = useMemo(() => {
+    if (!filtering) {
+      return options
+    }
+
+    const normalizedQuery = query.trim().toLowerCase()
+
+    if (!normalizedQuery) {
+      return options
+    }
+
+    return options.filter((option) =>
+      [option.label, option.value, option.groupLabel]
+        .filter((value) => value !== undefined && value !== null)
+        .some((value) => String(value).toLowerCase().includes(normalizedQuery)),
+    )
+  }, [filtering, options, query])
+
+  const selectOption = (option: SearchableSelectorOption) => {
+    setQuery(option.label)
+    setFiltering(false)
+    setOpen(false)
+    if (option.value !== selector.value) {
+      selector.onChange(option.value)
+    }
+  }
+
+  return (
+    <div ref={rootRef} className="relative">
+      <Input
+        className="h-9 min-h-9 pr-8"
+        disabled={busy}
+        placeholder={selector.label}
+        value={query}
+        onChange={(event) => {
+          setQuery(event.target.value)
+          setFiltering(true)
+          setOpen(true)
+        }}
+        onFocus={(event) => {
+          event.currentTarget.select()
+          setFiltering(false)
+          setOpen(true)
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && filteredOptions[0]) {
+            event.preventDefault()
+            selectOption(filteredOptions[0])
+          }
+        }}
+      />
+      <button
+        aria-label={`Open ${selector.label} selector`}
+        className="absolute right-2 top-1/2 -translate-y-1/2 rounded-sm px-1 text-muted-foreground transition-colors hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+        disabled={busy}
+        type="button"
+        onClick={() => {
+          setFiltering(false)
+          setOpen((currentOpen) => !currentOpen)
+        }}
+      >
+        ▾
+      </button>
+
+      {open && !busy ? (
+        <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-72 overflow-y-auto rounded-md border bg-popover py-1 text-popover-foreground shadow-lg">
+          {filteredOptions.length ? (
+            filteredOptions.map((option, index) => {
+              const previousOption = filteredOptions[index - 1]
+              const showGroupLabel =
+                option.groupLabel && option.groupLabel !== previousOption?.groupLabel
+
+              return (
+                <div key={`${option.groupLabel ?? "options"}:${option.value}`}>
+                  {showGroupLabel ? (
+                    <div className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {option.groupLabel}
+                    </div>
+                  ) : null}
+                  <button
+                    className="block w-full px-3 py-2 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground"
+                    type="button"
+                    onClick={() => selectOption(option)}
+                  >
+                    {option.label}
+                  </button>
+                </div>
+              )
+            })
+          ) : (
+            <div className="px-3 py-6 text-center text-sm text-muted-foreground">
+              No clients found.
+            </div>
+          )}
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 export function PermissionPageFlow({
@@ -338,15 +511,23 @@ export function PermissionPageFlow({
             }}
           >
             {selectors.map((selector) =>
-              <AppSelect
-                disabled={busy}
-                groups={selector.groups}
-                key={selector.label}
-                options={selector.options}
-                placeholder={selector.label}
-                value={selector.value}
-                onChange={selector.onChange}
-              />,
+              selector.searchable ? (
+                <SearchablePermissionSelector
+                  busy={busy}
+                  key={selector.label}
+                  selector={selector}
+                />
+              ) : (
+                <AppSelect
+                  disabled={busy}
+                  groups={selector.groups}
+                  key={selector.label}
+                  options={selector.options}
+                  placeholder={selector.label}
+                  value={selector.value}
+                  onChange={selector.onChange}
+                />
+              ),
             )}
 
             <Input

@@ -376,6 +376,7 @@ export function ClientPermissions() {
           {
             label: "Client",
             options: clientOptions,
+            searchable: true,
             value: cldbid ?? "",
             onChange: (value) => navigate("/permissions/client/" + value),
           },
