@@ -252,10 +252,10 @@ export function FileUpload() {
             onClick={() => void uploadFiles()}
           >
             <Upload className="size-4" />
-            {uploading ? "Uploading..." : "UPLOAD"}
+            {uploading ? "Uploading..." : "Upload"}
           </Button>
           <Button disabled={uploading} type="button" variant="outline" onClick={() => navigate(filesUrl)}>
-            CANCEL
+            Cancel
           </Button>
         </CardFooter>
       </Card>

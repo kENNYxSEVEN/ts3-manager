@@ -568,7 +568,7 @@ export function Logs() {
   const busy = loading || refreshing || loadingMore
 
   return (
-    <div className="mx-auto w-full max-w-7xl space-y-4">
+    <div className="mx-auto w-full max-w-8xl space-y-4">
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
       {!selectedServerKey ? (

@@ -645,29 +645,15 @@ export function ServerEdit() {
   }, [])
 
   useEffect(() => {
-    const scrollContainer = pageRef.current?.closest("main") as HTMLElement | null
-
-    const previousDocumentOverflow = document.documentElement.style.overflow
+    const previousHtmlOverflow = document.documentElement.style.overflow
     const previousBodyOverflow = document.body.style.overflow
-    const previousMainScrollbarGutter =
-      scrollContainer?.style.getPropertyValue("scrollbar-gutter") ?? ""
 
     document.documentElement.style.overflow = "hidden"
     document.body.style.overflow = "hidden"
-    scrollContainer?.style.setProperty("scrollbar-gutter", "stable")
 
     return () => {
-      document.documentElement.style.overflow = previousDocumentOverflow
+      document.documentElement.style.overflow = previousHtmlOverflow
       document.body.style.overflow = previousBodyOverflow
-
-      if (previousMainScrollbarGutter) {
-        scrollContainer?.style.setProperty(
-          "scrollbar-gutter",
-          previousMainScrollbarGutter,
-        )
-      } else {
-        scrollContainer?.style.removeProperty("scrollbar-gutter")
-      }
     }
   }, [])
 

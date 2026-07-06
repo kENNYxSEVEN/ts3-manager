@@ -334,7 +334,7 @@ export function ClientBan() {
                   variant="outline"
                   onClick={() => navigate(-1)}
                 >
-                  CANCEL
+                  Cancel
                 </Button>
               </div>
             </form>

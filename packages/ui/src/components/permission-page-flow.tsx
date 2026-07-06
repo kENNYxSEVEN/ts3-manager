@@ -561,7 +561,7 @@ export function PermissionPageFlow({
               type="button"
               onClick={() => void saveEditingPermission()}
             >
-              SAVE
+              Save
             </Button>
             <Button
               disabled={submitting}
@@ -569,7 +569,7 @@ export function PermissionPageFlow({
               variant="outline"
               onClick={() => setEditingPermission(null)}
             >
-              CANCEL
+              Cancel
             </Button>
           </>
         }
@@ -634,7 +634,7 @@ export function PermissionPageFlow({
               type="button"
               onClick={() => void removeSelectedPermission()}
             >
-              YES
+              Yes
             </Button>
             <Button
               disabled={submitting}
@@ -642,7 +642,7 @@ export function PermissionPageFlow({
               variant="outline"
               onClick={() => setDeletePermission(null)}
             >
-              CANCEL
+              Cancel
             </Button>
           </>
         }

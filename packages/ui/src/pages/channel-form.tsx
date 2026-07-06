@@ -394,6 +394,19 @@ export function ChannelForm({ mode }: ChannelFormProps) {
     queryUserRef.current = queryUser
   }, [queryUser])
 
+  useEffect(() => {
+    const previousHtmlOverflow = document.documentElement.style.overflow
+    const previousBodyOverflow = document.body.style.overflow
+
+    document.documentElement.style.overflow = "hidden"
+    document.body.style.overflow = "hidden"
+
+    return () => {
+      document.documentElement.style.overflow = previousHtmlOverflow
+      document.body.style.overflow = previousBodyOverflow
+    }
+  }, [])
+
   const selectedServerId = useMemo(() => {
     if (isUsableServerId(queryUser.virtualserverId)) {
       return queryUser.virtualserverId
@@ -828,7 +841,7 @@ export function ChannelForm({ mode }: ChannelFormProps) {
                   variant="outline"
                   onClick={() => navigate(-1)}
                 >
-                  CANCEL
+                  Cancel
                 </Button>
 
                 {mode === "edit" ? (
@@ -838,7 +851,7 @@ export function ChannelForm({ mode }: ChannelFormProps) {
                     variant="outline"
                     onClick={() => void saveForm("apply")}
                   >
-                    {submitting ? "SAVING..." : "APPLY"}
+                    {submitting ? "SAVING..." : "Apply"}
                   </Button>
                 ) : null}
 

@@ -1061,7 +1061,7 @@ export function Files() {
               }
             >
               <Trash2 className="size-4" />
-              REMOVE
+              Remove
             </Button>
             <Button
               disabled={channelsLoading || actionBusy}
@@ -1072,7 +1072,7 @@ export function Files() {
               <RefreshCw
                 className={cn("size-4", channelsLoading && "animate-spin")}
               />
-              REFRESH
+              Refresh
             </Button>
           </div>
           {selectedFileList.length ? (
