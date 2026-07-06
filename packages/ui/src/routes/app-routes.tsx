@@ -23,6 +23,7 @@ import { ServerEdit } from "@/pages/server-edit"
 import { ServersPage } from "@/pages/servers"
 import { Snapshot } from "@/pages/snapshot"
 import { SpacerAdd } from "@/pages/spacer-add"
+import { Tokens } from "@/pages/tokens"
 import { RouteProgress } from "@/components/route-progress"
 
 type MappedRoute = {
@@ -98,6 +99,7 @@ export function AppRoutes() {
           <Route path="/file/upload/:cid" element={<FileUpload />} />
           <Route path="/snapshot" element={<Snapshot />} />
           <Route path="/console" element={<Console />} />
+          <Route path="/tokens" element={<Tokens />} />
           <Route path="/channel/add" element={<ChannelForm mode="add" />} />
           <Route path="/channel/:cid/edit" element={<ChannelForm mode="edit" />} />
           <Route path="/client/:cldbid/ban" element={<ClientBan />} />
@@ -126,6 +128,7 @@ export function AppRoutes() {
                 route.path !== "/file/upload/:cid" &&
                 route.path !== "/snapshot" &&
                 route.path !== "/console" &&
+                route.path !== "/tokens" &&
                 route.path !== "/channel/add" &&
                 route.path !== "/channel/:cid/edit" &&
                 route.path !== "/client/:cldbid/ban" &&
