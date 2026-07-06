@@ -64,21 +64,27 @@ export function AppModal({
       <div
         aria-modal="true"
         className={cn(
-          "w-full max-w-lg rounded-lg border bg-card text-card-foreground shadow-lg",
+          "flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-lg border bg-card text-card-foreground shadow-lg",
           className,
         )}
         role="dialog"
         onClick={handleContentClick}
       >
         {title ? (
-          <div className="flex flex-col space-y-1.5 p-6">
+          <div className="flex shrink-0 flex-col space-y-1.5 p-6">
             <h2 className="text-lg font-semibold leading-none tracking-tight">
               {title}
             </h2>
           </div>
         ) : null}
-        <div className="p-6 pt-0">{children}</div>
-        {footer ? <div className="flex justify-end gap-2 p-6 pt-0">{footer}</div> : null}
+        <div className="min-h-0 flex-1 overflow-y-auto p-6 pt-0">
+          {children}
+        </div>
+        {footer ? (
+          <div className="flex shrink-0 flex-wrap justify-end gap-2 p-6 pt-0 max-sm:[&>*]:flex-1">
+            {footer}
+          </div>
+        ) : null}
       </div>
     </div>,
     document.body,

@@ -22,6 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { cn } from "@/lib/utils"
 
 export type Permission = {
   permdesc?: string
@@ -201,7 +202,7 @@ function SearchablePermissionSelector({
   }
 
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className="relative w-full">
       <Input
         className="h-9 min-h-9 pr-8"
         disabled={busy}
@@ -502,13 +503,12 @@ export function PermissionPageFlow({
         </CardHeader>
         <CardContent className="space-y-4 overflow-visible">
           <div
-            className="grid items-start gap-3"
-            style={{
-              gridTemplateColumns:
-                selectors.length > 1
-                  ? "repeat(2, minmax(220px, 320px)) minmax(220px, 1fr) auto"
-                  : "minmax(220px, 320px) minmax(220px, 1fr) auto",
-            }}
+            className={cn(
+              "grid grid-cols-1 items-start gap-3",
+              selectors.length > 1
+                ? "lg:grid-cols-[repeat(2,minmax(220px,320px))_minmax(220px,1fr)_auto]"
+                : "md:grid-cols-[minmax(220px,320px)_minmax(220px,1fr)_auto]",
+            )}
           >
             {selectors.map((selector) =>
               selector.searchable ? (
@@ -538,7 +538,7 @@ export function PermissionPageFlow({
               onChange={(event) => setFilter(event.target.value)}
             />
 
-            <label className="flex h-9 min-h-9 items-center gap-2 rounded-md border px-3 text-sm">
+            <label className="flex h-9 min-h-9 w-full items-center gap-2 rounded-md border px-3 text-sm">
               <Checkbox
                 checked={onlyGranted}
                 disabled={busy}
@@ -639,7 +639,7 @@ export function PermissionPageFlow({
                 </TableBody>
               </Table>
 
-              <div className="flex items-center justify-end gap-6 border-t px-4 py-3 text-sm text-muted-foreground">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3 text-sm text-muted-foreground sm:justify-end sm:gap-6">
                 <div className="flex items-center gap-3">
                   <span>Rows per page:</span>
                   <AppSelect

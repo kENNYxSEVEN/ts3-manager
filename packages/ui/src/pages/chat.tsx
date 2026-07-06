@@ -1,4 +1,5 @@
 import {
+  forwardRef,
   useCallback,
   useEffect,
   useMemo,
@@ -8,7 +9,7 @@ import {
   type ReactNode,
 } from "react"
 import { useNavigate, useParams, useSearchParams } from "react-router-dom"
-import { Hash, Send, UserRound, X } from "lucide-react"
+import { ChevronLeft, ChevronRight, Hash, Send, UserRound, X } from "lucide-react"
 
 import { TeamSpeak } from "@/api/teamspeak"
 import { useAuth, type QueryUser } from "@/auth/auth-context"
@@ -175,21 +176,20 @@ function isIncomingMessageForActiveChat(
   return false
 }
 
-function ChatTab({
-  active,
-  children,
-  onClick,
-  onClose,
-}: {
-  active?: boolean
-  children: ReactNode
-  onClick: () => void
-  onClose?: () => void
-}) {
+const ChatTab = forwardRef<
+  HTMLButtonElement,
+  {
+    active?: boolean
+    children: ReactNode
+    onClick: () => void
+    onClose?: () => void
+  }
+>(function ChatTab({ active, children, onClick, onClose }, ref) {
   return (
     <button
+      ref={ref}
       className={cn(
-        "flex min-w-0 items-center justify-center gap-2 rounded-md px-3 py-2 text-center text-sm font-medium transition-colors",
+        "flex min-w-[8rem] shrink-0 scroll-mx-16 items-center justify-center gap-2 rounded-md px-3 py-2 text-center text-sm font-medium transition-colors md:min-w-0 md:shrink",
         active
           ? "bg-muted text-foreground"
           : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
@@ -223,7 +223,7 @@ function ChatTab({
       ) : null}
     </button>
   )
-}
+})
 
 export function Chat() {
   const navigate = useNavigate()
@@ -236,6 +236,8 @@ export function Chat() {
   const activeChatRef = useRef<ActiveChat | null>(null)
   const messageIdRef = useRef(0)
   const chatBottomRef = useRef<HTMLDivElement | null>(null)
+  const chatTabsRef = useRef<HTMLDivElement | null>(null)
+  const activeTabRef = useRef<HTMLButtonElement | null>(null)
   const { dismissToast, showError, toasts } = useToastStack()
   const [channels, setChannels] = useState<ChannelRow[]>([])
   const [clients, setClients] = useState<ClientRow[]>([])
@@ -245,6 +247,7 @@ export function Chat() {
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [privateClientId, setPrivateClientId] = useState(clientId)
+  const [mobileChatOpen, setMobileChatOpen] = useState(Boolean(cid || clientId))
 
   useEffect(() => {
     queryUserRef.current = queryUser
@@ -255,6 +258,12 @@ export function Chat() {
       setPrivateClientId(clientId)
     }
   }, [clientId])
+
+  useEffect(() => {
+    if (cid || clientId) {
+      setMobileChatOpen(true)
+    }
+  }, [cid, clientId])
 
   const selectedServerId = useMemo(() => {
     if (isUsableServerId(queryUser.virtualserverId)) {
@@ -617,11 +626,13 @@ export function Chat() {
   )
 
   const navigateServer = () => {
+    setMobileChatOpen(true)
     navigate("/chat")
   }
 
   const navigateChannel = (nextCid = fallbackChannelId) => {
     if (nextCid) {
+      setMobileChatOpen(true)
       void moveQueryClientToChannel(nextCid).catch((moveError: unknown) => {
         showError(getErrorMessage(moveError))
       })
@@ -637,6 +648,7 @@ export function Chat() {
       return
     }
 
+    setMobileChatOpen(true)
     setPrivateClientId(String(nextClientId))
     navigate(
       (cid ? "/chat/" + String(cid) : "/chat") +
@@ -656,6 +668,10 @@ export function Chat() {
 
       navigate("/chat")
     }
+  }
+
+  const closeMobileChat = () => {
+    setMobileChatOpen(false)
   }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -696,24 +712,50 @@ export function Chat() {
   }
 
   const serverTabLabel = serverInfo.virtualserverName ?? "Server"
-  const channelTabLabel =
-    fallbackChannel?.channelName
-      ? formatChannelName(fallbackChannel.channelName)
-      : "Channel"
+  const channelTabLabel = fallbackChannel?.channelName
+    ? formatChannelName(fallbackChannel.channelName)
+    : "Channel"
   const privateTabLabel =
     privateTabClient?.clientNickname ??
     (privateClientId ? `Client ${privateClientId}` : "Private")
   const hasPrivateTab = Boolean(privateClientId)
 
+  useEffect(() => {
+    if (!mobileChatOpen) {
+      return
+    }
+
+    window.requestAnimationFrame(() => {
+      activeTabRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+        inline: "center",
+      })
+    })
+  }, [activeChat.mode, activeChat.target, mobileChatOpen])
+
+  const scrollMobileTabs = (direction: "left" | "right") => {
+    const tabs = chatTabsRef.current
+
+    if (!tabs) {
+      return
+    }
+
+    tabs.scrollBy({
+      behavior: "smooth",
+      left: direction === "left" ? -tabs.clientWidth * 0.75 : tabs.clientWidth * 0.75,
+    })
+  }
+
   const busy = loading || submitting
 
   return (
-    <div className="mx-auto h-[calc(98dvh-6rem)] min-h-0 w-full max-w-[1280px] overflow-hidden">
+    <div className="mx-auto h-[calc(100dvh-6rem)] min-h-[28rem] w-full max-w-[1280px] overflow-hidden md:h-[calc(98dvh-6rem)] md:min-h-0">
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
       <Card className="h-full overflow-hidden border bg-card text-card-foreground shadow-none">
         <CardContent className="grid h-full min-h-0 grid-cols-1 p-0 md:grid-cols-[360px_minmax(0,1fr)]">
-          <aside className="min-h-0 overflow-hidden border-b bg-muted/20 md:border-b-0 md:border-r">
+          <aside className="min-h-0 overflow-hidden bg-muted/20 md:border-r">
             <div className="h-full min-h-0 overflow-y-auto overflow-x-hidden">
               <div className="px-5 pb-2 pt-5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Channels
@@ -782,42 +824,87 @@ export function Chat() {
             </div>
           </aside>
 
-          <section className="flex min-h-0 flex-col bg-card">
+          <section
+            className={cn(
+              "flex-col bg-card md:static md:z-auto md:flex md:h-full md:min-h-0",
+              mobileChatOpen ? "fixed inset-x-0 bottom-0 top-16 z-50 flex" : "hidden",
+            )}
+          >
             <div
               className={cn(
-                "grid shrink-0 gap-2 border-b px-4 py-3",
-                hasPrivateTab ? "grid-cols-3" : "grid-cols-2",
+                "flex shrink-0 items-center gap-1 border-b px-2 py-3 md:grid md:gap-2 md:px-4",
+                hasPrivateTab ? "md:grid-cols-3" : "md:grid-cols-2",
               )}
             >
-              <ChatTab
-                active={activeChat.mode === "server"}
-                onClick={navigateServer}
+              <Button
+                aria-label="Scroll chat tabs left"
+                className="size-8 shrink-0 md:hidden"
+                size="icon"
+                type="button"
+                variant="ghost"
+                onClick={() => scrollMobileTabs("left")}
               >
-                {serverTabLabel}
-              </ChatTab>
-              <ChatTab
-                active={activeChat.mode === "channel"}
-                onClick={() => navigateChannel()}
+                <ChevronLeft className="size-4" />
+              </Button>
+              <div
+                ref={chatTabsRef}
+                className="flex min-w-0 flex-1 scroll-px-16 gap-2 overflow-x-auto scroll-smooth px-1 md:contents md:overflow-visible md:px-0"
               >
-                {channelTabLabel}
-              </ChatTab>
-              {privateClientId ? (
                 <ChatTab
-                  active={activeChat.mode === "private"}
-                  onClick={() => navigatePrivate()}
-                  onClose={closePrivate}
+                  ref={activeChat.mode === "server" ? activeTabRef : undefined}
+                  active={activeChat.mode === "server"}
+                  onClick={navigateServer}
                 >
-                  <span className="flex min-w-0 items-center">
-                    <span className="min-w-0 truncate">{privateTabLabel}</span>
-                    {privateTabClient ? (
-                      <ClientStatusIcons
-                        client={privateTabClient}
-                        className="ml-1 shrink-0"
-                      />
-                    ) : null}
-                  </span>
+                  {serverTabLabel}
                 </ChatTab>
-              ) : null}
+                <ChatTab
+                  ref={activeChat.mode === "channel" ? activeTabRef : undefined}
+                  active={activeChat.mode === "channel"}
+                  onClick={() => navigateChannel()}
+                >
+                  {channelTabLabel}
+                </ChatTab>
+                {privateClientId ? (
+                  <ChatTab
+                    ref={activeChat.mode === "private" ? activeTabRef : undefined}
+                    active={activeChat.mode === "private"}
+                    onClick={() => navigatePrivate()}
+                    onClose={closePrivate}
+                  >
+                    <span className="flex min-w-0 items-center">
+                      <span className="min-w-0 truncate">
+                        {privateTabLabel}
+                      </span>
+                      {privateTabClient ? (
+                        <ClientStatusIcons
+                          client={privateTabClient}
+                          className="ml-1 shrink-0"
+                        />
+                      ) : null}
+                    </span>
+                  </ChatTab>
+                ) : null}
+              </div>
+              <Button
+                aria-label="Scroll chat tabs right"
+                className="size-8 shrink-0 md:hidden"
+                size="icon"
+                type="button"
+                variant="ghost"
+                onClick={() => scrollMobileTabs("right")}
+              >
+                <ChevronRight className="size-4" />
+              </Button>
+              <Button
+                aria-label="Close chat"
+                className="size-8 shrink-0 md:hidden"
+                size="icon"
+                type="button"
+                variant="ghost"
+                onClick={closeMobileChat}
+              >
+                <X className="size-4" />
+              </Button>
             </div>
 
             <div className="shrink-0 px-4 py-2 text-center">
