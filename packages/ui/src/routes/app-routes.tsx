@@ -10,6 +10,8 @@ import { Chat } from "@/pages/chat"
 import { ClientBan } from "@/pages/client-ban"
 import { ClientEdit } from "@/pages/client-edit"
 import { ClientPermissions } from "@/pages/client-permissions"
+import { FileUpload } from "@/pages/file-upload"
+import { Files } from "@/pages/files"
 import { LoginPage } from "@/pages/login"
 import { Logs } from "@/pages/logs"
 import { LogoutPage } from "@/pages/logout"
@@ -18,6 +20,7 @@ import { ServerViewerPage } from "@/pages/server-viewer"
 import { ServerGroupPermissions } from "@/pages/server-group-permissions"
 import { ServerEdit } from "@/pages/server-edit"
 import { ServersPage } from "@/pages/servers"
+import { Snapshot } from "@/pages/snapshot"
 import { SpacerAdd } from "@/pages/spacer-add"
 import { RouteProgress } from "@/components/route-progress"
 
@@ -90,6 +93,9 @@ export function AppRoutes() {
           <Route path="/logs" element={<Logs />} />
           <Route path="/chat" element={<Chat />} />
           <Route path="/chat/:cid" element={<Chat />} />
+          <Route path="/files" element={<Files />} />
+          <Route path="/file/upload/:cid" element={<FileUpload />} />
+          <Route path="/snapshot" element={<Snapshot />} />
           <Route path="/channel/add" element={<ChannelForm mode="add" />} />
           <Route path="/channel/:cid/edit" element={<ChannelForm mode="edit" />} />
           <Route path="/client/:cldbid/ban" element={<ClientBan />} />
@@ -114,6 +120,9 @@ export function AppRoutes() {
                 route.path !== "/logs" &&
                 route.path !== "/chat" &&
                 route.path !== "/chat/:cid" &&
+                route.path !== "/files" &&
+                route.path !== "/file/upload/:cid" &&
+                route.path !== "/snapshot" &&
                 route.path !== "/channel/add" &&
                 route.path !== "/channel/:cid/edit" &&
                 route.path !== "/client/:cldbid/ban" &&
