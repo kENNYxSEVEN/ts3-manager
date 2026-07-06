@@ -1,8 +1,19 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent,
+  type PointerEvent,
+  type ReactNode,
+} from "react"
 import { Link } from "react-router-dom"
 import {
   ArrowRight,
   Ban,
+  ChevronDown,
+  ChevronRight,
   Edit,
   Hash,
   LockKeyhole,
@@ -24,12 +35,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { startLoading, stopLoading } from "@/lib/loading-progress"
 import { cn } from "@/lib/utils"
 
@@ -73,7 +78,31 @@ type ClientTreeItem = ClientRow & {
 }
 
 type TreeItem = ChannelTreeItem | ClientTreeItem
+
+type TreeMenuPosition = {
+  left: number
+  top: number
+}
+
+type ActiveTreeMenu =
+  | {
+      item: ChannelTreeItem
+      position: TreeMenuPosition
+      type: "channel"
+    }
+  | {
+      item: ClientTreeItem
+      position: TreeMenuPosition
+      type: "client"
+    }
+  | null
+
 const SERVER_VIEWER_CACHE_PREFIX = "ts3-manager:server-viewer:"
+const TREE_MENU_EDGE_GAP = 8
+const CHANNEL_TREE_MENU_HEIGHT = 232
+const CHANNEL_TREE_MENU_WIDTH = 208
+const CLIENT_TREE_MENU_HEIGHT = 232
+const CLIENT_TREE_MENU_WIDTH = 256
 
 type ServerViewerLoadResult = {
   serverInfo: ServerInfo
@@ -98,8 +127,14 @@ const serverViewerCache: ServerViewerCache = {
   clientList: [],
   loaded: false,
 }
-const serverViewerLoadFlights = new Map<string, Promise<ServerViewerLoadResult>>()
-const channelTreeLoadFlights = new Map<string, Promise<ServerViewerLoadResult>>()
+const serverViewerLoadFlights = new Map<
+  string,
+  Promise<ServerViewerLoadResult>
+>()
+const channelTreeLoadFlights = new Map<
+  string,
+  Promise<ServerViewerLoadResult>
+>()
 
 function readServerViewerCache(serverId: string | undefined) {
   if (!serverId) {
@@ -117,7 +152,10 @@ function readServerViewerCache(serverId: string | undefined) {
 
     const parsed = JSON.parse(cachedValue) as Partial<ServerViewerCache>
 
-    if (!Array.isArray(parsed.channelList) || !Array.isArray(parsed.clientList)) {
+    if (
+      !Array.isArray(parsed.channelList) ||
+      !Array.isArray(parsed.clientList)
+    ) {
       return undefined
     }
 
@@ -151,7 +189,11 @@ function writeServerViewerCache(cache: ServerViewerCache) {
 }
 
 function getServerViewerCache(serverId: string | undefined) {
-  if (serverId && serverViewerCache.loaded && serverViewerCache.serverId === serverId) {
+  if (
+    serverId &&
+    serverViewerCache.loaded &&
+    serverViewerCache.serverId === serverId
+  ) {
     return serverViewerCache
   }
 
@@ -200,11 +242,15 @@ function getErrorMessage(error: unknown) {
 }
 
 function valueOrDash(value: unknown) {
-  return value === undefined || value === null || value === "" ? "-" : String(value)
+  return value === undefined || value === null || value === ""
+    ? "-"
+    : String(value)
 }
 
 function getChannelLabel(channel: ChannelRow) {
-  return formatChannelName(channel.channelName).label.trim() || channel.channelName
+  return (
+    formatChannelName(channel.channelName).label.trim() || channel.channelName
+  )
 }
 
 function isUsableServerId(value: string | number | undefined | null) {
@@ -254,7 +300,10 @@ function normalizeEventId(value: unknown) {
   return undefined
 }
 
-function findRecordWithKeys(payload: unknown, keys: string[]): EventPayload | undefined {
+function findRecordWithKeys(
+  payload: unknown,
+  keys: string[],
+): EventPayload | undefined {
   if (!isRecord(payload)) {
     return undefined
   }
@@ -321,7 +370,9 @@ function getConnectedClient(payload: unknown): ClientRow | undefined {
     clid,
     cid,
     clientNickname:
-      typeof nickname === "string" && nickname ? nickname : "Client " + String(clid),
+      typeof nickname === "string" && nickname
+        ? nickname
+        : "Client " + String(clid),
     clientDatabaseId,
   }
 }
@@ -343,7 +394,10 @@ function createNestedList(
     })
 }
 
-function mergeTreeItems(clients: ClientRow[], channels: ChannelRow[]): TreeItem[] {
+function mergeTreeItems(
+  clients: ClientRow[],
+  channels: ChannelRow[],
+): TreeItem[] {
   return [
     ...clients.map((client) => ({
       ...client,
@@ -395,172 +449,391 @@ function formatChannelName(channelName: string): SpacerDisplay {
   }
 }
 
-function ChannelActions({
-  channel,
+function getTreeMenuPosition(
+  rowRect: DOMRect,
+  containerRect: DOMRect,
+  menuWidth: number,
+  menuHeight: number,
+): TreeMenuPosition {
+  const viewportHeight = window.innerHeight
+  const maxLeft = Math.max(0, containerRect.width - menuWidth)
+  const preferredLeft = rowRect.left - containerRect.left
+  const preferredTop = rowRect.bottom - containerRect.top + 4
+  const fallbackTop = rowRect.top - containerRect.top - menuHeight - 4
+  const opensDown =
+    rowRect.bottom + 4 + menuHeight <= viewportHeight - TREE_MENU_EDGE_GAP
+
+  return {
+    left: Math.min(Math.max(0, preferredLeft), maxLeft),
+    top: Math.max(0, opensDown ? preferredTop : fallbackTop),
+  }
+}
+
+function getTreeMenuItemId(activeTreeMenu: ActiveTreeMenu) {
+  return activeTreeMenu?.item.id ?? null
+}
+
+function getTreeMenuSize(type: Exclude<ActiveTreeMenu, null>["type"]) {
+  return type === "channel"
+    ? {
+        height: CHANNEL_TREE_MENU_HEIGHT,
+        width: CHANNEL_TREE_MENU_WIDTH,
+      }
+    : {
+        height: CLIENT_TREE_MENU_HEIGHT,
+        width: CLIENT_TREE_MENU_WIDTH,
+      }
+}
+
+function TreeMenuItemButton({
   children,
-  onDeleteChannel,
-  onSwitchChannel,
+  destructive,
+  disabled,
+  onClick,
 }: {
-  channel: ChannelTreeItem
   children: ReactNode
-  onDeleteChannel: (channel: ChannelTreeItem) => void
-  onSwitchChannel: (channel: ChannelTreeItem) => void
+  destructive?: boolean
+  disabled?: boolean
+  onClick?: () => void
 }) {
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-52">
-        <DropdownMenuItem onSelect={() => onSwitchChannel(channel)}>
-          <ArrowRight className="size-4" />
-          Switch to Channel
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link to={"/chat/" + String(channel.cid)}>
-            <MessageSquare className="size-4" />
-            Open Text Chat
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link to={"/channel/" + String(channel.cid) + "/edit?pid=" + String(channel.pid)}>
-            <Edit className="size-4" />
-            Edit Channel
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link to={"/permissions/channel/" + String(channel.cid)}>
-            <LockKeyhole className="size-4" />
-            Channel Permissions
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link to={"/channel/add?pid=" + String(channel.cid)}>
-            <Plus className="size-4" />
-            Create Sub-Channel
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          variant="destructive"
-          onSelect={() => onDeleteChannel(channel)}
-        >
-          <Trash2 className="size-4" />
-          Delete Channel
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <button
+      className={cn(
+        "flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground disabled:pointer-events-none disabled:opacity-50",
+        destructive && "text-destructive focus-visible:text-destructive",
+      )}
+      disabled={disabled}
+      type="button"
+      onClick={onClick}
+    >
+      {children}
+    </button>
   )
 }
 
-function ClientActions({
-  client,
+function TreeMenuItemLink({
   children,
-  onClientAction,
+  destructive,
+  onClick,
+  to,
 }: {
-  client: ClientTreeItem
   children: ReactNode
-  onClientAction: (type: ClientActionType, client: ClientTreeItem) => void
+  destructive?: boolean
+  onClick?: () => void
+  to: string
 }) {
-  const clientDbId = client.clientDatabaseId
+  return (
+    <Link
+      className={cn(
+        "flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground",
+        destructive && "text-destructive focus-visible:text-destructive",
+      )}
+      to={to}
+      onClick={onClick}
+    >
+      {children}
+    </Link>
+  )
+}
+
+function TreeContextMenu({
+  activeTreeMenu,
+  onClientAction,
+  onClose,
+  onDeleteChannel,
+  onSwitchChannel,
+}: {
+  activeTreeMenu: ActiveTreeMenu
+  onClientAction: (type: ClientActionType, client: ClientTreeItem) => void
+  onClose: () => void
+  onDeleteChannel: (channel: ChannelTreeItem) => void
+  onSwitchChannel: (channel: ChannelTreeItem) => void
+}) {
+  if (!activeTreeMenu) {
+    return null
+  }
+
+  const className =
+    activeTreeMenu.type === "channel" ? "w-52" : "w-64"
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>{children}</DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-64">
-        <DropdownMenuItem onSelect={() => onClientAction("poke", client)}>
-          <Zap className="size-4" />
-          Poke Client
-        </DropdownMenuItem>
-
-        <DropdownMenuItem asChild>
-          <Link to={"/chat?client=" + String(client.clid)}>
+    <div
+      data-tree-context-menu
+      className={cn(
+        "absolute z-50 overflow-hidden rounded-md border bg-popover py-1 text-popover-foreground shadow-lg",
+        className,
+      )}
+      style={{
+        left: activeTreeMenu.position.left,
+        top: activeTreeMenu.position.top,
+      }}
+    >
+      {activeTreeMenu.type === "channel" ? (
+        <>
+          <TreeMenuItemButton
+            onClick={() => {
+              onClose()
+              onSwitchChannel(activeTreeMenu.item)
+            }}
+          >
+            <ArrowRight className="size-4" />
+            Switch to Channel
+          </TreeMenuItemButton>
+          <TreeMenuItemLink
+            to={"/chat/" + String(activeTreeMenu.item.cid)}
+            onClick={onClose}
+          >
             <MessageSquare className="size-4" />
             Open Text Chat
-          </Link>
-        </DropdownMenuItem>
-
-        <DropdownMenuItem asChild>
-          <Link to={"/client/" + String(client.clid) + "/edit"}>
+          </TreeMenuItemLink>
+          <TreeMenuItemLink
+            to={
+              "/channel/" +
+              String(activeTreeMenu.item.cid) +
+              "/edit?pid=" +
+              String(activeTreeMenu.item.pid)
+            }
+            onClick={onClose}
+          >
+            <Edit className="size-4" />
+            Edit Channel
+          </TreeMenuItemLink>
+          <TreeMenuItemLink
+            to={"/permissions/channel/" + String(activeTreeMenu.item.cid)}
+            onClick={onClose}
+          >
+            <LockKeyhole className="size-4" />
+            Channel Permissions
+          </TreeMenuItemLink>
+          <TreeMenuItemLink
+            to={"/channel/add?pid=" + String(activeTreeMenu.item.cid)}
+            onClick={onClose}
+          >
+            <Plus className="size-4" />
+            Create Sub-Channel
+          </TreeMenuItemLink>
+          <TreeMenuItemButton
+            destructive
+            onClick={() => {
+              onClose()
+              onDeleteChannel(activeTreeMenu.item)
+            }}
+          >
+            <Trash2 className="size-4" />
+            Delete Channel
+          </TreeMenuItemButton>
+        </>
+      ) : (
+        <>
+          <TreeMenuItemButton
+            onClick={() => {
+              onClose()
+              onClientAction("poke", activeTreeMenu.item)
+            }}
+          >
+            <Zap className="size-4" />
+            Poke Client
+          </TreeMenuItemButton>
+          <TreeMenuItemLink
+            to={"/chat?client=" + String(activeTreeMenu.item.clid)}
+            onClick={onClose}
+          >
+            <MessageSquare className="size-4" />
+            Open Text Chat
+          </TreeMenuItemLink>
+          <TreeMenuItemLink
+            to={"/client/" + String(activeTreeMenu.item.clid) + "/edit"}
+            onClick={onClose}
+          >
             <Edit className="size-4" />
             Edit Client
-          </Link>
-        </DropdownMenuItem>
-
-        <DropdownMenuItem onSelect={() => onClientAction("kick-channel", client)}>
-          <ArrowRight className="size-4" />
-          Kick Client from Channel
-        </DropdownMenuItem>
-
-        <DropdownMenuItem onSelect={() => onClientAction("kick-server", client)}>
-          <ArrowRight className="size-4" />
-          Kick Client from Server
-        </DropdownMenuItem>
-
-        {clientDbId !== undefined && clientDbId !== null ? (
-        <DropdownMenuItem asChild>
-          <Link
-            className="text-destructive focus:text-destructive"
-            to={"/client/" + String(clientDbId) + "/ban"}
+          </TreeMenuItemLink>
+          <TreeMenuItemButton
+            onClick={() => {
+              onClose()
+              onClientAction("kick-channel", activeTreeMenu.item)
+            }}
           >
-            <Ban className="size-4" />
-            Ban Client
-          </Link>
-        </DropdownMenuItem>
-        ) : (
-          <DropdownMenuItem disabled>
-            <Ban className="size-4" />
-            Ban Client
-          </DropdownMenuItem>
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+            <ArrowRight className="size-4" />
+            Kick Client from Channel
+          </TreeMenuItemButton>
+          <TreeMenuItemButton
+            onClick={() => {
+              onClose()
+              onClientAction("kick-server", activeTreeMenu.item)
+            }}
+          >
+            <ArrowRight className="size-4" />
+            Kick Client from Server
+          </TreeMenuItemButton>
+          {activeTreeMenu.item.clientDatabaseId !== undefined &&
+          activeTreeMenu.item.clientDatabaseId !== null ? (
+            <TreeMenuItemLink
+              destructive
+              to={"/client/" + String(activeTreeMenu.item.clientDatabaseId) + "/ban"}
+              onClick={onClose}
+            >
+              <Ban className="size-4" />
+              Ban Client
+            </TreeMenuItemLink>
+          ) : (
+            <TreeMenuItemButton disabled>
+              <Ban className="size-4" />
+              Ban Client
+            </TreeMenuItemButton>
+          )}
+        </>
+      )}
+    </div>
   )
 }
 
 function ChannelTreeItem({
+  activeMenuItemId,
   item,
   depth = 0,
   onClientAction,
   onDeleteChannel,
+  onOpenTreeMenu,
   onSwitchChannel,
 }: {
+  activeMenuItemId: string | null
   item: TreeItem
   depth?: number
   onClientAction: (type: ClientActionType, client: ClientTreeItem) => void
   onDeleteChannel: (channel: ChannelTreeItem) => void
+  onOpenTreeMenu: (item: TreeItem, rect: DOMRect) => void
   onSwitchChannel: (channel: ChannelTreeItem) => void
 }) {
+  const [collapsed, setCollapsed] = useState(false)
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null)
+  const suppressClickRef = useRef(false)
+  const pointerOpenedMenuRef = useRef(false)
   const paddingLeft = String(depth * 18 + 8) + "px"
+  const menuOpen = activeMenuItemId === item.id
+
+  const openMenuForItem = (rect: DOMRect) => {
+    onOpenTreeMenu(item, rect)
+  }
+
+  const handlePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
+    if (event.button !== 0) {
+      return
+    }
+
+    if (event.pointerType !== "touch") {
+      pointerOpenedMenuRef.current = true
+      openMenuForItem(event.currentTarget.getBoundingClientRect())
+      return
+    }
+
+    touchStartRef.current = {
+      x: event.clientX,
+      y: event.clientY,
+    }
+    suppressClickRef.current = false
+    pointerOpenedMenuRef.current = false
+  }
+
+  const handlePointerMove = (event: PointerEvent<HTMLButtonElement>) => {
+    if (event.pointerType !== "touch" || !touchStartRef.current) {
+      return
+    }
+
+    const horizontalDelta = Math.abs(event.clientX - touchStartRef.current.x)
+    const verticalDelta = Math.abs(event.clientY - touchStartRef.current.y)
+
+    if (horizontalDelta > 8 || verticalDelta > 8) {
+      suppressClickRef.current = true
+    }
+  }
+
+  const handleClickCapture = (event: MouseEvent<HTMLButtonElement>) => {
+    if (suppressClickRef.current) {
+      event.preventDefault()
+      event.stopPropagation()
+      suppressClickRef.current = false
+      pointerOpenedMenuRef.current = false
+      return
+    }
+
+    event.preventDefault()
+    event.stopPropagation()
+
+    if (!pointerOpenedMenuRef.current) {
+      openMenuForItem(event.currentTarget.getBoundingClientRect())
+    }
+
+    pointerOpenedMenuRef.current = false
+  }
 
   if (isClientTreeItem(item)) {
     return (
-      <ClientActions client={item} onClientAction={onClientAction}>
-        <button
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-secondary/70 focus-visible:bg-secondary/70 focus-visible:outline-none"
-          style={{ paddingLeft }}
-          type="button"
-        >
-          <UserRound className="size-4 shrink-0 text-muted-foreground" />
-          <span className="flex min-w-0 flex-1 items-center">
-            <span className="min-w-0 truncate">{item.clientNickname}</span>
-            <ClientStatusIcons client={item} className="ml-1 shrink-0" />
-          </span>
-        </button>
-      </ClientActions>
+      <button
+        data-tree-menu-row
+        data-tree-menu-row-id={item.id}
+        className={cn(
+          "flex min-w-0 w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-secondary/70 focus-visible:bg-secondary/70 focus-visible:outline-none",
+          menuOpen && "bg-secondary/70",
+        )}
+        style={{ paddingLeft }}
+        type="button"
+        onClickCapture={handleClickCapture}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+      >
+        <UserRound className="size-4 shrink-0 text-muted-foreground" />
+        <span className="flex min-w-0 flex-1 items-center">
+          <span className="min-w-0 truncate">{item.clientNickname}</span>
+          <ClientStatusIcons client={item} className="ml-1 shrink-0" />
+        </span>
+      </button>
     )
   }
 
   const channelDisplay = formatChannelName(item.channelName)
+  const children = item.children ?? []
+  const hasClientChildren = children.some(isClientTreeItem)
+  const visibleChildren = collapsed && hasClientChildren ? [] : children
 
   return (
     <div>
-      <ChannelActions
-        channel={item}
-        onDeleteChannel={onDeleteChannel}
-        onSwitchChannel={onSwitchChannel}
+      <div
+        data-tree-menu-row
+        data-tree-menu-row-id={item.id}
+        className={cn(
+          "flex min-w-0 w-full items-center rounded-md transition-colors hover:bg-secondary/70 focus-within:bg-secondary/70",
+          menuOpen && "bg-secondary/70",
+        )}
+        style={{ paddingLeft }}
       >
+        {hasClientChildren ? (
+          <button
+            aria-label={collapsed ? "Expand channel" : "Collapse channel"}
+            className="flex size-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            type="button"
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              setCollapsed((currentCollapsed) => !currentCollapsed)
+            }}
+          >
+            {collapsed ? (
+              <ChevronRight className="size-4" />
+            ) : (
+              <ChevronDown className="size-4" />
+            )}
+          </button>
+        ) : (
+          <span className="size-6 shrink-0" aria-hidden="true" />
+        )}
+
         <button
-          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-secondary/70 focus-visible:bg-secondary/70 focus-visible:outline-none"
-          style={{ paddingLeft }}
+          className="flex min-w-0 flex-1 items-center gap-2 rounded-md py-1.5 pr-2 text-left text-sm focus-visible:outline-none"
           type="button"
+          onClickCapture={handleClickCapture}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
         >
           {channelDisplay.isSpacer ? (
             <span className="size-4 shrink-0" aria-hidden="true" />
@@ -577,14 +850,17 @@ function ChannelTreeItem({
             {channelDisplay.label}
           </span>
         </button>
-      </ChannelActions>
-      {item.children?.map((child) => (
+      </div>
+
+      {visibleChildren.map((child) => (
         <ChannelTreeItem
+          activeMenuItemId={activeMenuItemId}
           depth={depth + 1}
           item={child}
           key={child.id}
           onClientAction={onClientAction}
           onDeleteChannel={onDeleteChannel}
+          onOpenTreeMenu={onOpenTreeMenu}
           onSwitchChannel={onSwitchChannel}
         />
       ))}
@@ -610,6 +886,7 @@ export function ServerViewerPage() {
   const reloadInFlightRef = useRef(false)
   const reloadQueuedRef = useRef(false)
   const queryUserRef = useRef(queryUser)
+  const treeWrapperRef = useRef<HTMLDivElement | null>(null)
   const { dismissToast, showError, toasts } = useToastStack()
   const selectedServerKey = isUsableServerId(selectedServerId)
     ? String(selectedServerId)
@@ -632,21 +909,93 @@ export function ServerViewerPage() {
   const [deleteChannelAction, setDeleteChannelAction] =
     useState<DeleteChannelAction>(null)
   const [forceChannelDelete, setForceChannelDelete] = useState(false)
+  const [activeTreeMenu, setActiveTreeMenu] = useState<ActiveTreeMenu>(null)
 
   const hasMatchingCache = Boolean(
     selectedServerKey &&
-      serverViewerCache.loaded &&
-      serverViewerCache.serverId === selectedServerKey,
+    serverViewerCache.loaded &&
+    serverViewerCache.serverId === selectedServerKey,
   )
 
   const channelTree = useMemo(
     () => createNestedList(mergeTreeItems(clientList, channelList)),
     [channelList, clientList],
   )
+  const activeTreeMenuId = getTreeMenuItemId(activeTreeMenu)
 
   useEffect(() => {
     queryUserRef.current = queryUser
   }, [queryUser])
+
+  const closeTreeMenu = useCallback(() => {
+    setActiveTreeMenu(null)
+  }, [])
+
+  const openTreeMenu = useCallback((item: TreeItem, rect: DOMRect) => {
+    const containerRect = treeWrapperRef.current?.getBoundingClientRect()
+
+    if (!containerRect) {
+      return
+    }
+
+    if (isClientTreeItem(item)) {
+      const { height, width } = getTreeMenuSize("client")
+
+      setActiveTreeMenu({
+        item,
+        position: getTreeMenuPosition(rect, containerRect, width, height),
+        type: "client",
+      })
+      return
+    }
+
+    const { height, width } = getTreeMenuSize("channel")
+
+    setActiveTreeMenu({
+      item,
+      position: getTreeMenuPosition(rect, containerRect, width, height),
+      type: "channel",
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!activeTreeMenu) {
+      return
+    }
+
+    const handlePointerDown = (event: globalThis.PointerEvent) => {
+      const target = event.target
+
+      if (!(target instanceof Element)) {
+        closeTreeMenu()
+        return
+      }
+
+      if (target.closest("[data-tree-context-menu]")) {
+        return
+      }
+
+      if (target.closest("[data-tree-menu-row]")) {
+        return
+      }
+
+      closeTreeMenu()
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeTreeMenu()
+      }
+    }
+
+    document.addEventListener("pointerdown", handlePointerDown, true)
+    document.addEventListener("keydown", handleKeyDown)
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown, true)
+      document.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [activeTreeMenu, closeTreeMenu])
 
   const setError = useCallback(
     (message: string | null) => {
@@ -655,33 +1004,35 @@ export function ServerViewerPage() {
     [showError],
   )
 
-  const ensureSelectedServer = useCallback(async (
-    progress: "foreground" | "background" | "none" = "foreground",
-  ) => {
-    if (!isUsableServerId(selectedServerId)) {
-      throw new Error("No valid virtual server selected.")
-    }
+  const ensureSelectedServer = useCallback(
+    async (progress: "foreground" | "background" | "none" = "foreground") => {
+      if (!isUsableServerId(selectedServerId)) {
+        throw new Error("No valid virtual server selected.")
+      }
 
-    const validSelectedServerId = selectedServerId as string | number
+      const validSelectedServerId = selectedServerId as string | number
 
-    const currentQueryUser = queryUserRef.current
+      const currentQueryUser = queryUserRef.current
 
-    if (
-      isUsableServerId(currentQueryUser.virtualserverId) &&
-      String(currentQueryUser.virtualserverId) === String(validSelectedServerId)
-    ) {
+      if (
+        isUsableServerId(currentQueryUser.virtualserverId) &&
+        String(currentQueryUser.virtualserverId) ===
+          String(validSelectedServerId)
+      ) {
+        saveServerId(validSelectedServerId)
+        return currentQueryUser
+      }
+
+      await TeamSpeak.useServer(validSelectedServerId, {
+        progress,
+      })
+
       saveServerId(validSelectedServerId)
-      return currentQueryUser
-    }
 
-    await TeamSpeak.useServer(validSelectedServerId, {
-      progress,
-    })
-
-    saveServerId(validSelectedServerId)
-
-    return undefined
-  }, [saveServerId, selectedServerId])
+      return undefined
+    },
+    [saveServerId, selectedServerId],
+  )
 
   const loadChannelTree = useCallback(
     async (
@@ -723,9 +1074,14 @@ export function ServerViewerPage() {
           TeamSpeak.execute<ChannelRow[]>("channellist", {}, [], {
             progress: options.progress ?? "background",
           }),
-          TeamSpeak.execute<ClientRow[]>("clientlist", {}, ["-voice", "-away"], {
-            progress: options.progress ?? "background",
-          }),
+          TeamSpeak.execute<ClientRow[]>(
+            "clientlist",
+            {},
+            ["-voice", "-away"],
+            {
+              progress: options.progress ?? "background",
+            },
+          ),
           selectedQueryUser ??
             TeamSpeak.ensureQueryIdentity({
               progress: options.progress ?? "background",
@@ -795,112 +1151,123 @@ export function ServerViewerPage() {
     }, 250)
   }, [loadChannelTree])
 
-  const loadServerViewer = useCallback(async (
-    options: { foreground?: boolean } = {},
-  ) => {
-    if (!isUsableServerId(selectedServerId)) {
-      setServerInfo({})
-      setChannelList([])
-      setClientList([])
+  const loadServerViewer = useCallback(
+    async (options: { foreground?: boolean } = {}) => {
+      if (!isUsableServerId(selectedServerId)) {
+        setServerInfo({})
+        setChannelList([])
+        setClientList([])
+        setError(null)
+        setLoading(false)
+        return
+      }
+
+      const currentCache = getServerViewerCache(selectedServerKey)
+      const canUseCache = Boolean(currentCache?.loaded)
+
+      if (currentCache?.loaded) {
+        setServerInfo(currentCache.serverInfo)
+        setChannelList(currentCache.channelList)
+        setClientList(currentCache.clientList)
+
+        if (currentCache.queryUser) {
+          saveQueryUser(currentCache.queryUser)
+        }
+      } else {
+        setServerInfo({})
+        setChannelList([])
+        setClientList([])
+      }
+
+      setLoading(Boolean(options.foreground) || !canUseCache)
       setError(null)
-      setLoading(false)
-      return
-    }
 
-    const currentCache = getServerViewerCache(selectedServerKey)
-    const canUseCache = Boolean(currentCache?.loaded)
+      try {
+        if (!selectedServerKey) {
+          throw new Error("No valid virtual server selected.")
+        }
 
-    if (currentCache?.loaded) {
-      setServerInfo(currentCache.serverInfo)
-      setChannelList(currentCache.channelList)
-      setClientList(currentCache.clientList)
+        let flight = serverViewerLoadFlights.get(selectedServerKey)
+        const hadExistingFlight = Boolean(flight)
 
-      if (currentCache.queryUser) {
-        saveQueryUser(currentCache.queryUser)
-      }
-    } else {
-      setServerInfo({})
-      setChannelList([])
-      setClientList([])
-    }
+        if (!flight) {
+          flight = (async () => {
+            const progress: ProgressMode =
+              options.foreground || !canUseCache ? "foreground" : "background"
+            const selectedQueryUser = await ensureSelectedServer(progress)
 
-    setLoading(Boolean(options.foreground) || !canUseCache)
-    setError(null)
+            const [info, nextChannels, nextClients, nextQueryUser] =
+              await Promise.all([
+                TeamSpeak.execute<ServerInfo[]>("serverinfo", {}, [], {
+                  progress,
+                }),
+                TeamSpeak.execute<ChannelRow[]>("channellist", {}, [], {
+                  progress,
+                }),
+                TeamSpeak.execute<ClientRow[]>(
+                  "clientlist",
+                  {},
+                  ["-voice", "-away"],
+                  {
+                    progress,
+                  },
+                ),
+                selectedQueryUser ??
+                  TeamSpeak.ensureQueryIdentity({ progress: "background" }),
+              ])
 
-    try {
-      if (!selectedServerKey) {
-        throw new Error("No valid virtual server selected.")
-      }
+            const nextServerInfo = info[0] ?? {}
 
-      let flight = serverViewerLoadFlights.get(selectedServerKey)
-      const hadExistingFlight = Boolean(flight)
+            serverViewerCache.serverId = selectedServerKey
+            serverViewerCache.serverInfo = nextServerInfo
+            serverViewerCache.channelList = nextChannels
+            serverViewerCache.clientList = nextClients
+            serverViewerCache.queryUser = nextQueryUser
+            serverViewerCache.loaded = true
+            serverViewerCache.lastLoadedAt = Date.now()
+            writeServerViewerCache(serverViewerCache)
 
-      if (!flight) {
-        flight = (async () => {
-          const progress: ProgressMode =
-            options.foreground || !canUseCache ? "foreground" : "background"
-          const selectedQueryUser = await ensureSelectedServer(progress)
+            return {
+              serverInfo: nextServerInfo,
+              channelList: nextChannels,
+              clientList: nextClients,
+              queryUser: nextQueryUser,
+            }
+          })().finally(() => {
+            serverViewerLoadFlights.delete(selectedServerKey)
+          })
 
-          const [info, nextChannels, nextClients, nextQueryUser] = await Promise.all([
-            TeamSpeak.execute<ServerInfo[]>("serverinfo", {}, [], { progress }),
-            TeamSpeak.execute<ChannelRow[]>("channellist", {}, [], { progress }),
-            TeamSpeak.execute<ClientRow[]>("clientlist", {}, ["-voice", "-away"], {
-              progress,
-            }),
-            selectedQueryUser ??
-              TeamSpeak.ensureQueryIdentity({ progress: "background" }),
-          ])
+          serverViewerLoadFlights.set(selectedServerKey, flight)
+        }
 
-          const nextServerInfo = info[0] ?? {}
+        let wrappedExistingForeground = false
 
-          serverViewerCache.serverId = selectedServerKey
-          serverViewerCache.serverInfo = nextServerInfo
-          serverViewerCache.channelList = nextChannels
-          serverViewerCache.clientList = nextClients
-          serverViewerCache.queryUser = nextQueryUser
-          serverViewerCache.loaded = true
-          serverViewerCache.lastLoadedAt = Date.now()
-          writeServerViewerCache(serverViewerCache)
+        if (options.foreground && hadExistingFlight) {
+          startLoading()
+          wrappedExistingForeground = true
+        }
 
-          return {
-            serverInfo: nextServerInfo,
-            channelList: nextChannels,
-            clientList: nextClients,
-            queryUser: nextQueryUser,
+        const result = await flight.finally(() => {
+          if (wrappedExistingForeground) {
+            stopLoading()
           }
-        })().finally(() => {
-          serverViewerLoadFlights.delete(selectedServerKey)
         })
 
-        serverViewerLoadFlights.set(selectedServerKey, flight)
-      }
+        setServerInfo(result.serverInfo)
+        setChannelList(result.channelList)
+        setClientList(result.clientList)
 
-      let wrappedExistingForeground = false
-
-      if (options.foreground && hadExistingFlight) {
-        startLoading()
-        wrappedExistingForeground = true
-      }
-
-      const result = await flight.finally(() => {
-        if (wrappedExistingForeground) {
-          stopLoading()
+        if (result.queryUser) {
+          saveQueryUser(result.queryUser)
         }
-      })
-
-      setServerInfo(result.serverInfo)
-      setChannelList(result.channelList)
-      setClientList(result.clientList)
-
-      if (result.queryUser) {
-        saveQueryUser(result.queryUser)
+      } catch (loadError) {
+        setError(getErrorMessage(loadError))
+      } finally {
+        setLoading(false)
       }
-    } catch (loadError) {
-      setError(getErrorMessage(loadError))
-    } finally {
-      setLoading(false)
-    }
-  }, [ensureSelectedServer, saveQueryUser, selectedServerId, selectedServerKey])
+    },
+    [ensureSelectedServer, saveQueryUser, selectedServerId, selectedServerKey],
+  )
 
   const moveClientLocally = useCallback(
     (clientId: string | number, channelId: string | number) => {
@@ -911,7 +1278,10 @@ export function ServerViewerPage() {
             : client,
         )
 
-        if (selectedServerKey && serverViewerCache.serverId === selectedServerKey) {
+        if (
+          selectedServerKey &&
+          serverViewerCache.serverId === selectedServerKey
+        ) {
           serverViewerCache.clientList = nextClients
           writeServerViewerCache(serverViewerCache)
         }
@@ -936,7 +1306,10 @@ export function ServerViewerPage() {
           (client) => String(client.clid) !== String(clientId),
         )
 
-        if (selectedServerKey && serverViewerCache.serverId === selectedServerKey) {
+        if (
+          selectedServerKey &&
+          serverViewerCache.serverId === selectedServerKey
+        ) {
           serverViewerCache.clientList = nextClients
           writeServerViewerCache(serverViewerCache)
         }
@@ -954,7 +1327,10 @@ export function ServerViewerPage() {
           (channel) => String(channel.cid) !== String(channelId),
         )
 
-        if (selectedServerKey && serverViewerCache.serverId === selectedServerKey) {
+        if (
+          selectedServerKey &&
+          serverViewerCache.serverId === selectedServerKey
+        ) {
           serverViewerCache.channelList = nextChannels
           writeServerViewerCache(serverViewerCache)
         }
@@ -967,7 +1343,10 @@ export function ServerViewerPage() {
           (client) => String(client.cid) !== String(channelId),
         )
 
-        if (selectedServerKey && serverViewerCache.serverId === selectedServerKey) {
+        if (
+          selectedServerKey &&
+          serverViewerCache.serverId === selectedServerKey
+        ) {
           serverViewerCache.clientList = nextClients
           writeServerViewerCache(serverViewerCache)
         }
@@ -1119,7 +1498,10 @@ export function ServerViewerPage() {
         )
         const nextClients = [...withoutDuplicate, client]
 
-        if (selectedServerKey && serverViewerCache.serverId === selectedServerKey) {
+        if (
+          selectedServerKey &&
+          serverViewerCache.serverId === selectedServerKey
+        ) {
           serverViewerCache.clientList = nextClients
           writeServerViewerCache(serverViewerCache)
         }
@@ -1134,7 +1516,10 @@ export function ServerViewerPage() {
           (client) => String(client.clid) !== String(clientId),
         )
 
-        if (selectedServerKey && serverViewerCache.serverId === selectedServerKey) {
+        if (
+          selectedServerKey &&
+          serverViewerCache.serverId === selectedServerKey
+        ) {
           serverViewerCache.clientList = nextClients
           writeServerViewerCache(serverViewerCache)
         }
@@ -1201,7 +1586,12 @@ export function ServerViewerPage() {
       TeamSpeak.off("channelmoved", handleTreeEvent)
       TeamSpeak.off("channeldelete", handleTreeEvent)
     }
-  }, [moveClientLocally, scheduleChannelTreeReload, selectedServerId, selectedServerKey])
+  }, [
+    moveClientLocally,
+    scheduleChannelTreeReload,
+    selectedServerId,
+    selectedServerKey,
+  ])
 
   const clientActionTitle =
     clientAction?.type === "poke"
@@ -1238,26 +1628,32 @@ export function ServerViewerPage() {
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
-          <div className="min-w-0">
+        <CardHeader className="flex flex-col items-stretch gap-3 pb-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0 sm:flex-1">
             <CardTitle className="truncate">
               {valueOrDash(serverInfo.virtualserverName)}
             </CardTitle>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <Button asChild size="sm">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:shrink-0 sm:flex-nowrap">
+            <Button asChild className="min-w-32 flex-1 sm:flex-none" size="sm">
               <Link to="/channel/add">
                 <Plus className="size-4" />
                 Add Channel
               </Link>
             </Button>
-            <Button asChild size="sm" variant="outline">
+            <Button
+              asChild
+              className="min-w-32 flex-1 sm:flex-none"
+              size="sm"
+              variant="outline"
+            >
               <Link to="/spacer/add">
                 <Plus className="size-4" />
                 Add Spacer
               </Link>
             </Button>
             <Button
+              className="min-w-28 flex-1 sm:flex-none"
               disabled={loading}
               size="sm"
               type="button"
@@ -1275,16 +1671,32 @@ export function ServerViewerPage() {
               Loading server viewer...
             </div>
           ) : channelTree.length ? (
-            <div className="space-y-0.5 rounded-lg border p-2">
-              {channelTree.map((item) => (
-                <ChannelTreeItem
-                  item={item}
-                  key={item.id}
-                  onClientAction={openClientAction}
-                  onDeleteChannel={openDeleteChannel}
-                  onSwitchChannel={(channel) => void handleSwitchChannel(channel)}
-                />
-              ))}
+            <div
+              ref={treeWrapperRef}
+              className="relative max-w-full overflow-visible rounded-lg border p-2"
+            >
+              <div className="max-w-full space-y-0.5 overflow-x-hidden">
+                {channelTree.map((item) => (
+                  <ChannelTreeItem
+                    activeMenuItemId={activeTreeMenuId}
+                    item={item}
+                    key={item.id}
+                    onClientAction={openClientAction}
+                    onDeleteChannel={openDeleteChannel}
+                    onOpenTreeMenu={openTreeMenu}
+                    onSwitchChannel={(channel) =>
+                      void handleSwitchChannel(channel)
+                    }
+                  />
+                ))}
+              </div>
+              <TreeContextMenu
+                activeTreeMenu={activeTreeMenu}
+                onClientAction={openClientAction}
+                onClose={closeTreeMenu}
+                onDeleteChannel={openDeleteChannel}
+                onSwitchChannel={(channel) => void handleSwitchChannel(channel)}
+              />
             </div>
           ) : (
             <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
@@ -1384,7 +1796,6 @@ export function ServerViewerPage() {
           ) : null}
         </div>
       </AppModal>
-
     </div>
   )
 }
