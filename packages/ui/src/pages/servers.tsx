@@ -779,16 +779,6 @@ const selectedServerId = useMemo(() => {
         </CardContent>
       </Card>
 
-      {/* <Button
-        asChild
-        className="fixed bottom-6 right-6 z-30 size-12 rounded-full shadow-lg"
-        size="icon"
-      >
-        <Link aria-label="Create server" to="/server/create">
-          <Plus className="size-5" />
-        </Link>
-      </Button> */}
-
       <ConfirmDialog
         action={confirmAction}
         busy={actionBusy}
