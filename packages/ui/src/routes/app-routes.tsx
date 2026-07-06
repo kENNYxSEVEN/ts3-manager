@@ -23,6 +23,7 @@ import { LogoutPage } from "@/pages/logout"
 import { PlaceholderPage } from "@/pages/placeholder"
 import { ServerViewerPage } from "@/pages/server-viewer"
 import { ServerGroupPermissions } from "@/pages/server-group-permissions"
+import { ServerGroups } from "@/pages/server-groups"
 import { ServerEdit } from "@/pages/server-edit"
 import { ServersPage } from "@/pages/servers"
 import { Snapshot } from "@/pages/snapshot"
@@ -59,7 +60,6 @@ const protectedRoutes: MappedRoute[] = [
   { path: "/client/:cldbid/ban", title: "Ban Client" },
   { path: "/client/:clid/edit", title: "Edit Client" },
   { path: "/servergroups", title: "Server Groups" },
-  { path: "/servergroup/:sgid/edit", title: "Edit Server Group" },
   { path: "/channelgroups", title: "Channel Groups" },
   { path: "/channelgroup/:cgid/edit", title: "Edit Channel Group" },
   { path: "/channel/:cid/edit", title: "Edit Channel" },
@@ -112,6 +112,7 @@ export function AppRoutes() {
           <Route path="/channel/:cid/edit" element={<ChannelForm mode="edit" />} />
           <Route path="/client/:cldbid/ban" element={<ClientBan />} />
           <Route path="/client/:clid/edit" element={<ClientEdit />} />
+          <Route path="/servergroups" element={<ServerGroups />} />
           <Route path="/spacer/add" element={<SpacerAdd />} />
           <Route path="/permissions/client" element={<ClientPermissions />} />
           <Route path="/permissions/client/:cldbid" element={<ClientPermissions />} />
@@ -145,6 +146,7 @@ export function AppRoutes() {
                 route.path !== "/channel/:cid/edit" &&
                 route.path !== "/client/:cldbid/ban" &&
                 route.path !== "/client/:clid/edit" &&
+                route.path !== "/servergroups" &&
                 route.path !== "/spacer/add" &&
                 route.path !== "/permissions/client" &&
                 route.path !== "/permissions/client/:cldbid" &&
