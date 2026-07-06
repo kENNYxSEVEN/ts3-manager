@@ -226,7 +226,7 @@ export function ServerCreate() {
                 Server token generated
               </div>
             ) : null}
-            <div className="flex gap-2">
+            <div className="flex min-w-0 gap-2">
               <Input
                 id="generated-server-token"
                 readOnly
@@ -247,7 +247,7 @@ export function ServerCreate() {
             </div>
           </div>
         </CardContent>
-        <CardFooter className="justify-end gap-2">
+        <CardFooter className="flex-wrap justify-end gap-2 max-sm:[&>*]:w-full">
           <Button
             disabled={!valid || creating}
             type="button"

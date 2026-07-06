@@ -591,7 +591,7 @@ export function Clients() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto px-6 pb-2">
+          <div className="max-w-full overflow-x-auto px-3 pb-2 sm:px-6">
             <Table className="w-full min-w-[1180px]">
               <TableHeader>
                 <TableRow>
@@ -734,7 +734,7 @@ export function Clients() {
               </TableBody>
             </Table>
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-5 border-t px-6 py-3 text-sm text-muted-foreground">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t px-3 py-3 text-sm text-muted-foreground sm:justify-end sm:gap-5 sm:px-6">
             <div className="flex items-center gap-2">
               <span>Rows per page:</span>
               <div className="w-24">

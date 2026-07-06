@@ -770,7 +770,7 @@ export function ServerEdit() {
               Select an online virtual server from Server List first.
             </CardDescription>
           </CardHeader>
-          <CardFooter className="justify-end gap-2">
+          <CardFooter className="flex-wrap justify-end gap-2 max-sm:[&>*]:w-full">
             <Button type="button" variant="outline" onClick={() => navigate("/servers")}>
               Back to Servers
             </Button>
@@ -1260,7 +1260,7 @@ export function ServerEdit() {
             )}
           </CardContent>
 
-          <CardFooter className="justify-end gap-2">
+          <CardFooter className="flex-wrap justify-end gap-2 max-sm:[&>*]:w-full">
             <Button disabled={disabled} type="submit">
               OK
             </Button>

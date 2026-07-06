@@ -245,7 +245,7 @@ export function FileUpload() {
             </span>
           </button>
         </CardContent>
-        <CardFooter className="justify-end gap-2">
+        <CardFooter className="flex-wrap justify-end gap-2 max-sm:[&>*]:w-full">
           <Button
             disabled={uploading || !files.length}
             type="button"

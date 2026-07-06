@@ -155,14 +155,14 @@ export function LoginPage() {
         <ThemeToggle />
       </header>
 
-      <main className="flex min-h-0 flex-1 items-center justify-center p-6">
+      <main className="flex min-h-0 flex-1 items-center justify-center p-4 sm:p-6">
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle>TS3 Manager</CardTitle>
           </CardHeader>
           <CardContent>
             <form className="space-y-5" onSubmit={handleSubmit}>
-              <div className="grid grid-cols-[1fr_7rem] gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_7rem]">
                 <div className="space-y-2">
                   <Label htmlFor="host">Server</Label>
                   <Input

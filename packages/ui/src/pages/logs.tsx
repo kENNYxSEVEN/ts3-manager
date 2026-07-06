@@ -586,7 +586,7 @@ export function Logs() {
       ) : (
         <Card className="overflow-hidden">
           <CardHeader className="space-y-4">
-            <div className="grid gap-3 xl:grid-cols-[1.3fr_220px_1fr_auto]">
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-[1.3fr_220px_1fr_auto]">
               <div className="flex flex-wrap items-center gap-3">
                 {levelOptions.map((level) => (
                   <label
@@ -647,7 +647,7 @@ export function Logs() {
           </CardHeader>
 
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
+            <div className="max-w-full overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>

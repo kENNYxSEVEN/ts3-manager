@@ -579,8 +579,9 @@ const selectedServerId = useMemo(() => {
             Manage your TeamSpeak virtual servers
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
           <Button
+            className="flex-1 sm:flex-none"
             disabled={loading || actionBusy}
             type="button"
             variant="outline"
@@ -589,7 +590,7 @@ const selectedServerId = useMemo(() => {
             <RefreshCw className={cn("size-4", loading && "animate-spin")} />
             Refresh
           </Button>
-          <Button asChild>
+          <Button asChild className="flex-1 sm:flex-none">
             <Link to="/server/create">
               <Plus className="size-4" />
               Create Server
@@ -734,7 +735,7 @@ const selectedServerId = useMemo(() => {
             </TableBody>
           </Table>
 
-          <div className="flex min-h-14 items-center justify-end gap-8 border-t px-4 text-xs text-muted-foreground">
+          <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-t px-4 py-3 text-xs text-muted-foreground sm:justify-end sm:gap-8">
             <div className="flex items-center gap-3">
               <span>Rows per page:</span>
               <AppSelect

@@ -40,7 +40,7 @@ export function NotFound() {
             </span>
           </div>
         </CardContent>
-        <CardFooter className="justify-end gap-2">
+        <CardFooter className="flex-wrap justify-end gap-2 max-sm:[&>*]:w-full">
           <Button asChild>
             <Link to="/servers">Go to Server List</Link>
           </Button>

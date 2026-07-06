@@ -1050,9 +1050,10 @@ export function Files() {
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-3">
-          <div className="flex gap-2">
+        <CardHeader className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
             <Button
+              className="flex-1 sm:flex-none"
               disabled={!selectedFileList.length || actionBusy}
               type="button"
               variant="destructive"
@@ -1064,6 +1065,7 @@ export function Files() {
               Remove
             </Button>
             <Button
+              className="flex-1 sm:flex-none"
               disabled={channelsLoading || actionBusy}
               type="button"
               variant="outline"
@@ -1076,13 +1078,13 @@ export function Files() {
             </Button>
           </div>
           {selectedFileList.length ? (
-            <CardDescription>
+            <CardDescription className="min-w-0 truncate">
               {selectedFileList.length} selected
             </CardDescription>
           ) : null}
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-hidden border-t">
+          <div className="max-w-full overflow-x-hidden border-t">
             {channelsLoading ? (
               <div className="px-4 py-12 text-center text-sm text-muted-foreground">
                 Loading channels...

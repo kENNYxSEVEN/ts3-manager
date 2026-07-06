@@ -423,7 +423,7 @@ export function Snapshot() {
             />
           </div>
         </CardContent>
-        <CardFooter className="justify-between gap-2">
+        <CardFooter className="flex-wrap justify-between gap-2 max-sm:[&>*]:w-full">
           <Button
             disabled={!deploySnapshotText && !deployFileName}
             type="button"

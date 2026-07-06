@@ -681,7 +681,7 @@ export function ServerGroups() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto px-6 pb-2">
+          <div className="max-w-full overflow-x-auto px-3 pb-2 sm:px-6">
             <Table className="w-full min-w-[620px]">
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
@@ -874,7 +874,7 @@ export function ServerGroups() {
           </div>
 
           <div className="rounded-md border p-4">
-            <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="text-sm font-medium pb-3">Members</div>
               </div>
