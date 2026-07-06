@@ -1,4 +1,4 @@
-import { CheckCircle2, Copy, Server, X } from "lucide-react"
+import { CheckCircle2, Copy, X } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
 
@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
-  CardDescription,
   CardFooter,
   CardHeader,
   CardTitle,
