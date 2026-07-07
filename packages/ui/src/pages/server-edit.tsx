@@ -1270,14 +1270,14 @@ export function ServerEdit() {
               variant="outline"
               onClick={() => navigate(-1)}
             >
-              CANCEL
+              Cancel
             </Button>
             <Button
               disabled={disabled || !hasChanges}
               type="button"
               onClick={() => void saveChanges({ leaveAfterSave: false })}
             >
-              {saving ? "Saving..." : "APPLY"}
+              {saving ? "Saving..." : "Apply"}
             </Button>
           </CardFooter>
         </form>

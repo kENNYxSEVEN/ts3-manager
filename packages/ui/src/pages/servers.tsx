@@ -183,18 +183,18 @@ function ConfirmDialog({
           <Button
             disabled={busy}
             type="button"
-            variant="outline"
-            onClick={onCancel}
-          >
-            Cancel
-          </Button>
-          <Button
-            disabled={busy}
-            type="button"
             variant={isStop ? "default" : "destructive"}
             onClick={onConfirm}
           >
             {busy ? "Working..." : isStop ? "Stop" : "Delete"}
+          </Button>
+          <Button
+            disabled={busy}
+            type="button"
+            variant="outline"
+            onClick={onCancel}
+          >
+            Cancel
           </Button>
         </>
       }
