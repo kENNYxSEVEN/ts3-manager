@@ -25,7 +25,6 @@ import {
   type LucideIcon,
 } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -381,7 +380,6 @@ export function AppLayout() {
             </div>
 
             <div className="flex shrink-0 items-center gap-2">
-              <Badge variant="outline">Connected</Badge>
               <ThemeToggle />
             </div>
           </header>
