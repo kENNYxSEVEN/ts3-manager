@@ -591,7 +591,114 @@ export function Clients() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="max-w-full overflow-x-auto px-3 pb-2 sm:px-6">
+          <div className="space-y-2 px-3 pb-3 md:hidden">
+            {loading ? (
+              <div className="rounded-md border p-4 text-center text-sm text-muted-foreground">
+                ...loading
+              </div>
+            ) : visibleClients.length ? (
+              visibleClients.map((client) => {
+                const cldbid = String(client.cldbid)
+                const selected = selectedClientIdSet.has(cldbid)
+                const nickname = getClientNickname(client)
+                const uniqueId = client.clientUniqueIdentifier ?? ""
+                const lastIp = client.clientLastip ?? ""
+
+                return (
+                  <div
+                    className="rounded-md border p-3 text-sm"
+                    data-state={selected ? "selected" : undefined}
+                    key={cldbid}
+                  >
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        checked={selected}
+                        onCheckedChange={(checked) =>
+                          toggleClientSelection(cldbid, checked === true)
+                        }
+                      />
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <div className="flex min-w-0 items-start justify-between gap-2">
+                          <div
+                            className="min-w-0 truncate font-medium"
+                            title={nickname}
+                          >
+                            {nickname}
+                          </div>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                size="icon-sm"
+                                type="button"
+                                variant="ghost"
+                              >
+                                <MoreVertical className="size-4" />
+                                <span className="sr-only">
+                                  Open client actions
+                                </span>
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem asChild>
+                                <Link to={`/client/${client.cldbid}/ban`}>
+                                  Ban Client
+                                </Link>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onSelect={() => openDeleteDialog([client])}
+                              >
+                                Delete Client
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                        <div className="grid gap-2 text-xs">
+                          <div className="flex items-start justify-between gap-3">
+                            <span className="shrink-0 text-muted-foreground">
+                              Unique Identifier
+                            </span>
+                            <span className="min-w-0 break-all text-right">
+                              {uniqueId || "-"}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-muted-foreground">Last IP</span>
+                            <span className="min-w-0 truncate text-right">
+                              {lastIp || "-"}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-muted-foreground">Created</span>
+                            <span className="text-right">
+                              {formatDate(client.clientCreated) || "-"}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-muted-foreground">Last</span>
+                            <span className="text-right">
+                              {formatDate(client.clientLastconnected) || "-"}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-muted-foreground">Total</span>
+                            <span className="text-right">
+                              {client.clientTotalconnections ?? "-"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })
+            ) : (
+              <div className="rounded-md border p-4 text-center text-sm text-muted-foreground">
+                No clients found.
+              </div>
+            )}
+          </div>
+          <div className="hidden max-w-full overflow-x-auto px-3 pb-2 sm:px-6 md:block">
             <Table className="w-full min-w-[1180px]">
               <TableHeader>
                 <TableRow>

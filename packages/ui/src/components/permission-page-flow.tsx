@@ -554,90 +554,159 @@ export function PermissionPageFlow({
             </div>
           ) : (
             <div className="overflow-visible rounded-md">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-14" />
-                    <TableHead>Permission</TableHead>
-                    <TableHead className="w-36 text-right">Value</TableHead>
-                    {supportsSkip ? (
-                      <TableHead className="w-24 text-center">Skip</TableHead>
-                    ) : null}
-                    {supportsNegated ? (
-                      <TableHead className="w-24 text-center">Negate</TableHead>
-                    ) : null}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paginatedPermissionList.length ? (
-                    paginatedPermissionList.map((permission) => (
-                      <TableRow
-                        className="overflow-visible"
-                        key={getPermissionKey(permission)}
-                      >
-                        <TableCell className="relative overflow-visible">
-                          <Button
-                            aria-label="Permission actions"
-                            disabled={busy}
-                            size="icon"
-                            type="button"
-                            variant="ghost"
-                            onClick={(event) =>
-                              toggleActionMenu(permission, event)
-                            }
-                          >
-                            <MoreVertical className="size-4" />
-                          </Button>
-                        </TableCell>
-                        <TableCell className="min-w-0 whitespace-normal py-3">
-                          <div className="font-medium leading-tight">
+              <div className="space-y-2 pb-3 md:hidden">
+                {paginatedPermissionList.length ? (
+                  paginatedPermissionList.map((permission) => (
+                    <div
+                      className="rounded-md border p-3 text-sm"
+                      key={getPermissionKey(permission)}
+                    >
+                      <div className="flex min-w-0 items-start justify-between gap-2">
+                        <div className="min-w-0 space-y-1">
+                          <div className="break-words font-medium leading-tight">
                             {permission.permname ?? permission.permid}
                           </div>
                           {permission.permdesc ? (
-                            <div className="mt-1 text-xs leading-tight text-muted-foreground">
+                            <div className="break-words text-xs leading-tight text-muted-foreground">
                               {permission.permdesc}
                             </div>
                           ) : null}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {String(permission.permvalue ?? "")}
-                        </TableCell>
+                        </div>
+                        <Button
+                          aria-label="Permission actions"
+                          disabled={busy}
+                          size="icon-sm"
+                          type="button"
+                          variant="ghost"
+                          onClick={(event) => toggleActionMenu(permission, event)}
+                        >
+                          <MoreVertical className="size-4" />
+                        </Button>
+                      </div>
+                      <div className="mt-3 grid gap-2 text-xs">
+                        <div className="flex items-start justify-between gap-3">
+                          <span className="shrink-0 text-muted-foreground">
+                            Value
+                          </span>
+                          <span className="min-w-0 break-words text-right">
+                            {String(permission.permvalue ?? "")}
+                          </span>
+                        </div>
                         {supportsSkip ? (
-                          <TableCell>
-                            <div className="flex justify-center">
-                              <Checkbox
-                                checked={normalizeBoolean(permission.permskip)}
-                                disabled
-                              />
-                            </div>
-                          </TableCell>
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-muted-foreground">Skip</span>
+                            <Checkbox
+                              checked={normalizeBoolean(permission.permskip)}
+                              disabled
+                            />
+                          </div>
                         ) : null}
                         {supportsNegated ? (
-                          <TableCell>
-                            <div className="flex justify-center">
-                              <Checkbox
-                                checked={normalizeBoolean(
-                                  permission.permnegated,
-                                )}
-                                disabled
-                              />
-                            </div>
-                          </TableCell>
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-muted-foreground">
+                              Negate
+                            </span>
+                            <Checkbox
+                              checked={normalizeBoolean(permission.permnegated)}
+                              disabled
+                            />
+                          </div>
                         ) : null}
-                      </TableRow>
-                    ))
-                  ) : (
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-md border p-4 text-center text-sm text-muted-foreground">
+                    No permissions found.
+                  </div>
+                )}
+              </div>
+              <div className="hidden md:block">
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell
-                        className="h-24 text-center text-muted-foreground"
-                        colSpan={permissionTableColumnCount}
-                      >
-                        No permissions found.
-                      </TableCell>
+                      <TableHead className="w-14" />
+                      <TableHead>Permission</TableHead>
+                      <TableHead className="w-36 text-right">Value</TableHead>
+                      {supportsSkip ? (
+                        <TableHead className="w-24 text-center">Skip</TableHead>
+                      ) : null}
+                      {supportsNegated ? (
+                        <TableHead className="w-24 text-center">Negate</TableHead>
+                      ) : null}
                     </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedPermissionList.length ? (
+                      paginatedPermissionList.map((permission) => (
+                        <TableRow
+                          className="overflow-visible"
+                          key={getPermissionKey(permission)}
+                        >
+                          <TableCell className="relative overflow-visible">
+                            <Button
+                              aria-label="Permission actions"
+                              disabled={busy}
+                              size="icon"
+                              type="button"
+                              variant="ghost"
+                              onClick={(event) =>
+                                toggleActionMenu(permission, event)
+                              }
+                            >
+                              <MoreVertical className="size-4" />
+                            </Button>
+                          </TableCell>
+                          <TableCell className="min-w-0 whitespace-normal py-3">
+                            <div className="font-medium leading-tight">
+                              {permission.permname ?? permission.permid}
+                            </div>
+                            {permission.permdesc ? (
+                              <div className="mt-1 text-xs leading-tight text-muted-foreground">
+                                {permission.permdesc}
+                              </div>
+                            ) : null}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {String(permission.permvalue ?? "")}
+                          </TableCell>
+                          {supportsSkip ? (
+                            <TableCell>
+                              <div className="flex justify-center">
+                                <Checkbox
+                                  checked={normalizeBoolean(permission.permskip)}
+                                  disabled
+                                />
+                              </div>
+                            </TableCell>
+                          ) : null}
+                          {supportsNegated ? (
+                            <TableCell>
+                              <div className="flex justify-center">
+                                <Checkbox
+                                  checked={normalizeBoolean(
+                                    permission.permnegated,
+                                  )}
+                                  disabled
+                                />
+                              </div>
+                            </TableCell>
+                          ) : null}
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell
+                          className="h-24 text-center text-muted-foreground"
+                          colSpan={permissionTableColumnCount}
+                        >
+                          No permissions found.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
 
               <div className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3 text-sm text-muted-foreground sm:justify-end sm:gap-6">
                 <div className="flex items-center gap-3">

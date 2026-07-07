@@ -703,7 +703,90 @@ export function Bans() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="max-w-full overflow-x-auto px-3 pb-2 sm:px-6">
+          <div className="space-y-2 px-3 pb-3 md:hidden">
+            {loading ? (
+              <div className="rounded-md border p-4 text-center text-sm text-muted-foreground">
+                ...loading
+              </div>
+            ) : visibleBans.length ? (
+              visibleBans.map((ban) => {
+                const banid = String(ban.banid)
+                const selected = selectedBanIdSet.has(banid)
+                const targetText = getBanTargetText(ban)
+
+                return (
+                  <div
+                    className="rounded-md border p-3 text-sm"
+                    data-state={selected ? "selected" : undefined}
+                    key={banid}
+                  >
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        checked={selected}
+                        onCheckedChange={(checked) =>
+                          toggleBanSelection(banid, checked === true)
+                        }
+                      />
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <div className="flex min-w-0 items-start justify-between gap-2">
+                          <div
+                            className="min-w-0 break-words font-medium"
+                            title={targetText}
+                          >
+                            {targetText || "-"}
+                          </div>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                size="icon-sm"
+                                type="button"
+                                variant="ghost"
+                              >
+                                <MoreVertical className="size-4" />
+                                <span className="sr-only">Open ban actions</span>
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onSelect={() => openEditDialog(ban)}>
+                                Edit Ban
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onSelect={() => openDeleteDialog([ban])}
+                              >
+                                Remove Ban
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                        <div className="grid gap-2 text-xs">
+                          <div className="flex items-start justify-between gap-3">
+                            <span className="shrink-0 text-muted-foreground">
+                              Reason
+                            </span>
+                            <span className="min-w-0 break-words text-right">
+                              {ban.reason || "-"}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-muted-foreground">Expires</span>
+                            <span className="text-right">
+                              {getBanExpiryDisplay(ban) || "-"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })
+            ) : (
+              <div className="rounded-md border p-4 text-center text-sm text-muted-foreground">
+                No bans found.
+              </div>
+            )}
+          </div>
+          <div className="hidden max-w-full overflow-x-auto px-3 pb-2 sm:px-6 md:block">
             <Table className="w-full min-w-[760px]">
               <TableHeader>
                 <TableRow>

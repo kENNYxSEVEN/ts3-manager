@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { copyTextToClipboard } from "@/lib/clipboard"
 
 type ServerRow = {
   virtualserverPort?: string | number
@@ -165,7 +166,7 @@ export function ServerCreate() {
     }
 
     try {
-      await navigator.clipboard.writeText(createdServer.token)
+      await copyTextToClipboard(createdServer.token)
       showSuccess("Token copied")
     } catch {
       showError("Could not copy token.")

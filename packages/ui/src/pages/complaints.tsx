@@ -500,7 +500,122 @@ export function Complaints() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="max-w-full overflow-x-auto px-3 pb-2 sm:px-6">
+          <div className="space-y-2 px-3 pb-3 md:hidden">
+            {loading ? (
+              <div className="rounded-md border p-4 text-center text-sm text-muted-foreground">
+                ...loading
+              </div>
+            ) : visibleComplaints.length ? (
+              visibleComplaints.map((complaint) => {
+                const complaintKey = getComplaintKey(complaint)
+                const selected = selectedComplaintKeySet.has(complaintKey)
+                const targetName = getTargetName(complaint)
+                const fromName = getFromName(complaint)
+                const reason = complaint.message ?? ""
+
+                return (
+                  <div
+                    className="rounded-md border p-3 text-sm"
+                    data-state={selected ? "selected" : undefined}
+                    key={complaintKey}
+                  >
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        checked={selected}
+                        onCheckedChange={(checked) =>
+                          toggleComplaintSelection(
+                            complaintKey,
+                            checked === true,
+                          )
+                        }
+                      />
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <div className="flex min-w-0 items-start justify-between gap-2">
+                          <div
+                            className="min-w-0 truncate font-medium"
+                            title={targetName}
+                          >
+                            {targetName}
+                          </div>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                size="icon-sm"
+                                type="button"
+                                variant="ghost"
+                              >
+                                <MoreVertical className="size-4" />
+                                <span className="sr-only">
+                                  Open complaint actions
+                                </span>
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                              align="end"
+                              className="w-fit min-w-0 max-w-[18rem]"
+                            >
+                              <DropdownMenuItem asChild>
+                                <Link
+                                  className="flex min-w-0 max-w-[16rem] items-center"
+                                  title={`Ban ${targetName}`}
+                                  to={`/client/${complaint.tcldbid}/ban`}
+                                >
+                                  <span className="block min-w-0 truncate">
+                                    Ban {targetName}
+                                  </span>
+                                </Link>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem asChild>
+                                <Link
+                                  className="flex min-w-0 max-w-[16rem] items-center"
+                                  title={`Ban ${fromName}`}
+                                  to={`/client/${complaint.fcldbid}/ban`}
+                                >
+                                  <span className="block min-w-0 truncate">
+                                    Ban {fromName}
+                                  </span>
+                                </Link>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="whitespace-nowrap"
+                                variant="destructive"
+                                onSelect={() => openDeleteDialog([complaint])}
+                              >
+                                Remove Complaint
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                        <div className="grid gap-2 text-xs">
+                          <div className="flex items-start justify-between gap-3">
+                            <span className="shrink-0 text-muted-foreground">
+                              From Nickname
+                            </span>
+                            <span className="min-w-0 break-words text-right">
+                              {fromName}
+                            </span>
+                          </div>
+                          <div className="flex items-start justify-between gap-3">
+                            <span className="shrink-0 text-muted-foreground">
+                              Reason
+                            </span>
+                            <span className="min-w-0 break-words text-right">
+                              {reason ? `"${reason}"` : "-"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })
+            ) : (
+              <div className="rounded-md border p-4 text-center text-sm text-muted-foreground">
+                No complaints found.
+              </div>
+            )}
+          </div>
+          <div className="hidden max-w-full overflow-x-auto px-3 pb-2 sm:px-6 md:block">
             <Table className="w-full min-w-[680px]">
               <TableHeader>
                 <TableRow>

@@ -25,6 +25,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { copyTextToClipboard } from "@/lib/clipboard"
 
 type SnapshotRow = {
   data?: string
@@ -182,7 +183,7 @@ export function Snapshot() {
     }
 
     try {
-      await navigator.clipboard.writeText(createdSnapshot)
+      await copyTextToClipboard(createdSnapshot)
       showSuccess("Snapshot copied")
     } catch (error) {
       showError(getErrorMessage(error))

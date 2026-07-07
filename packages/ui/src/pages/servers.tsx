@@ -607,74 +607,77 @@ const selectedServerId = useMemo(() => {
 
       <Card className="overflow-hidden rounded-sm shadow-sm">
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow className="h-16 hover:bg-transparent">
-                <TableHead className="w-14" />
-                <TableHead className="w-24 text-xs font-semibold">
-                  Select
-                </TableHead>
-                <TableHead className="text-xs font-semibold">Name</TableHead>
-                <TableHead className="w-28 text-xs font-semibold">
-                  Port
-                </TableHead>
-                <TableHead className="w-32 text-xs font-semibold">
-                  Clients
-                </TableHead>
-                <TableHead className="w-48 text-xs font-semibold">
-                  Uptime (d:h:m:s)
-                </TableHead>
-                <TableHead className="w-32 text-xs font-semibold">
-                  Status
-                </TableHead>
-              </TableRow>
-            </TableHeader>
+          <div className="space-y-2 p-3 md:hidden">
+            {loading && servers.length === 0 ? (
+              <div className="rounded-md border p-4 text-center text-sm text-muted-foreground">
+                Loading servers...
+              </div>
+            ) : servers.length === 0 ? (
+              <div className="rounded-md border p-4 text-center text-sm text-muted-foreground">
+                No virtual servers found.
+              </div>
+            ) : (
+              visibleServers.map((server) => {
+                const offline = isOffline(server.virtualserverStatus)
+                const selected = sameServerId(
+                  selectedServerId,
+                  server.virtualserverId,
+                )
 
-            <TableBody>
-              {loading && servers.length === 0 ? (
-                <TableRow className="h-20">
-                  <TableCell
-                    colSpan={7}
-                    className="text-center text-sm text-muted-foreground"
+                return (
+                  <div
+                    className="rounded-md border p-4 text-sm"
+                    data-state={selected ? "selected" : undefined}
+                    key={String(server.virtualserverId)}
                   >
-                    Loading servers...
-                  </TableCell>
-                </TableRow>
-              ) : servers.length === 0 ? (
-                <TableRow className="h-20">
-                  <TableCell
-                    colSpan={7}
-                    className="text-center text-sm text-muted-foreground"
-                  >
-                    No virtual servers found.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                visibleServers.map((server) => {
-                  const offline = isOffline(server.virtualserverStatus)
-                  const selected = sameServerId(
-                    selectedServerId,
-                    server.virtualserverId,
-                  )
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm text-muted-foreground">
+                        Select
+                      </span>
+                      <button
+                        aria-label={`Select ${server.virtualserverName}`}
+                        aria-pressed={selected}
+                        className={cn(
+                          "flex size-4 shrink-0 items-center justify-center rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                          selected
+                            ? "border-primary"
+                            : "border-muted-foreground/60 hover:border-foreground",
+                        )}
+                        disabled={offline || loading || actionBusy}
+                        type="button"
+                        onClick={() => {
+                          if (!selected) {
+                            void handleSelectServer(server)
+                          }
+                        }}
+                      >
+                        {selected ? (
+                          <span className="size-2 rounded-full bg-primary" />
+                        ) : null}
+                      </button>
+                    </div>
 
-                  return (
-                    <TableRow
-                      key={String(server.virtualserverId)}
-                      className="h-16 hover:bg-muted/30"
-                      data-state={selected ? "selected" : undefined}
-                    >
-                      <TableCell>
+                    <div className="mt-4 border-t pt-4">
+                      <div className="flex min-w-0 items-start justify-between gap-3">
+                        <div
+                          className="min-w-0 flex-1 truncate font-medium"
+                          title={server.virtualserverName}
+                        >
+                          {server.virtualserverName}
+                        </div>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
                               aria-label="Open server actions"
-                              size="icon"
+                              className="-mr-2 -mt-1 shrink-0"
+                              size="icon-sm"
+                              type="button"
                               variant="ghost"
                             >
                               <MoreVertical className="size-4" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="start" className="w-40">
+                          <DropdownMenuContent align="end" className="w-40">
                             <DropdownMenuItem
                               disabled={offline || loading || actionBusy}
                               onSelect={(event) => {
@@ -696,44 +699,178 @@ const selectedServerId = useMemo(() => {
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
-                      </TableCell>
+                      </div>
+                    </div>
 
-                      <TableCell>
-                        <input
-                          aria-label={`Select ${server.virtualserverName}`}
-                          checked={selected}
-                          className="size-4 accent-primary disabled:cursor-not-allowed disabled:opacity-50"
-                          disabled={offline || loading || actionBusy}
-                          name="selected-server"
-                          type="radio"
-                          onChange={() => void handleSelectServer(server)}
-                        />
-                      </TableCell>
-
-                      <TableCell className="font-medium">
-                        {server.virtualserverName}
-                      </TableCell>
-                      <TableCell>{server.virtualserverPort}</TableCell>
-                      <TableCell>
-                        {server.virtualserverClientsonline}/
-                        {server.virtualserverMaxclients}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {formatUptime(server.virtualserverUptime)}
-                      </TableCell>
-                      <TableCell>
+                    <div className="mt-4 grid gap-3 border-t pt-4 text-xs">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-muted-foreground">ID</span>
+                        <span className="min-w-0 truncate text-right">
+                          {server.virtualserverId}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-muted-foreground">Port</span>
+                        <span className="text-right">
+                          {server.virtualserverPort}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-muted-foreground">Clients</span>
+                        <span className="text-right">
+                          {server.virtualserverClientsonline}/
+                          {server.virtualserverMaxclients}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-muted-foreground">Uptime</span>
+                        <span className="font-mono text-right">
+                          {formatUptime(server.virtualserverUptime)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3 border-t pt-3">
+                        <span className="text-muted-foreground">Status</span>
                         <StatusControl
                           disabled={loading || actionBusy}
                           server={server}
                           onChangeStatus={changeServerStatus}
                         />
-                      </TableCell>
-                    </TableRow>
-                  )
-                })
-              )}
-            </TableBody>
-          </Table>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
+          <div className="hidden md:block">
+            <Table>
+              <TableHeader>
+                <TableRow className="h-16 hover:bg-transparent">
+                  <TableHead className="w-14" />
+                  <TableHead className="w-24 text-xs font-semibold">
+                    Select
+                  </TableHead>
+                  <TableHead className="text-xs font-semibold">Name</TableHead>
+                  <TableHead className="w-28 text-xs font-semibold">
+                    Port
+                  </TableHead>
+                  <TableHead className="w-32 text-xs font-semibold">
+                    Clients
+                  </TableHead>
+                  <TableHead className="w-48 text-xs font-semibold">
+                    Uptime (d:h:m:s)
+                  </TableHead>
+                  <TableHead className="w-32 text-xs font-semibold">
+                    Status
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+
+              <TableBody>
+                {loading && servers.length === 0 ? (
+                  <TableRow className="h-20">
+                    <TableCell
+                      colSpan={7}
+                      className="text-center text-sm text-muted-foreground"
+                    >
+                      Loading servers...
+                    </TableCell>
+                  </TableRow>
+                ) : servers.length === 0 ? (
+                  <TableRow className="h-20">
+                    <TableCell
+                      colSpan={7}
+                      className="text-center text-sm text-muted-foreground"
+                    >
+                      No virtual servers found.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  visibleServers.map((server) => {
+                    const offline = isOffline(server.virtualserverStatus)
+                    const selected = sameServerId(
+                      selectedServerId,
+                      server.virtualserverId,
+                    )
+
+                    return (
+                      <TableRow
+                        key={String(server.virtualserverId)}
+                        className="h-16 hover:bg-muted/30"
+                        data-state={selected ? "selected" : undefined}
+                      >
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                aria-label="Open server actions"
+                                size="icon"
+                                variant="ghost"
+                              >
+                                <MoreVertical className="size-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className="w-40">
+                              <DropdownMenuItem
+                                disabled={offline || loading || actionBusy}
+                                onSelect={(event) => {
+                                  event.preventDefault()
+                                  void handleEditServer(server)
+                                }}
+                              >
+                                <Edit className="size-4" />
+                                Edit Server
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-destructive focus:text-destructive"
+                                onSelect={() =>
+                                  setConfirmAction({ type: "delete", server })
+                                }
+                              >
+                                <Trash2 className="size-4" />
+                                Delete Server
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+
+                        <TableCell>
+                          <input
+                            aria-label={`Select ${server.virtualserverName}`}
+                            checked={selected}
+                            className="size-4 accent-primary disabled:cursor-not-allowed disabled:opacity-50"
+                            disabled={offline || loading || actionBusy}
+                            name="selected-server"
+                            type="radio"
+                            onChange={() => void handleSelectServer(server)}
+                          />
+                        </TableCell>
+
+                        <TableCell className="font-medium">
+                          {server.virtualserverName}
+                        </TableCell>
+                        <TableCell>{server.virtualserverPort}</TableCell>
+                        <TableCell>
+                          {server.virtualserverClientsonline}/
+                          {server.virtualserverMaxclients}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">
+                          {formatUptime(server.virtualserverUptime)}
+                        </TableCell>
+                        <TableCell>
+                          <StatusControl
+                            disabled={loading || actionBusy}
+                            server={server}
+                            onChangeStatus={changeServerStatus}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
 
           <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-t px-4 py-3 text-xs text-muted-foreground sm:justify-end sm:gap-8">
             <div className="flex items-center gap-3">

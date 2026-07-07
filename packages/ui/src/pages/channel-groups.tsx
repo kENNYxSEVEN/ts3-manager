@@ -743,7 +743,90 @@ export function ChannelGroups() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="max-w-full overflow-x-auto px-3 pb-2 sm:px-6">
+          <div className="space-y-2 px-3 pb-3 md:hidden">
+            {loading ? (
+              <div className="rounded-md border p-4 text-center text-sm text-muted-foreground">
+                ...loading
+              </div>
+            ) : groups.length ? (
+              sortedGroups.map((group, index) => {
+                const previousGroup = sortedGroups[index - 1]
+                const showSection =
+                  !previousGroup ||
+                  getGroupTypeValue(previousGroup) !== getGroupTypeValue(group)
+
+                return (
+                  <Fragment key={String(group.cgid)}>
+                    {showSection ? (
+                      <div className="pt-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground first:pt-0">
+                        {getGroupSectionLabel(group.type)}
+                      </div>
+                    ) : null}
+                    <div className="space-y-3 rounded-md border p-3 text-sm">
+                      <div className="flex min-w-0 items-start justify-between gap-2">
+                        <div
+                          className="min-w-0 flex-1 truncate font-medium"
+                          title={getChannelGroupName(group)}
+                        >
+                          {getChannelGroupName(group)}
+                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              className="shrink-0"
+                              size="icon-sm"
+                              type="button"
+                              variant="ghost"
+                            >
+                              <MoreVertical className="size-4" />
+                              <span className="sr-only">
+                                Open channel group actions
+                              </span>
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onSelect={() => openEditDialog(group)}>
+                              Edit Group
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => openCopyDialog(group)}>
+                              Copy Group
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              variant="destructive"
+                              onSelect={() => openDeleteDialog(group)}
+                            >
+                              Delete Group
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-3 text-xs">
+                          <span className="shrink-0 text-muted-foreground">ID</span>
+                          <span className="min-w-0 max-w-[68%] break-words text-right">
+                            {group.cgid}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-3 text-xs">
+                          <span className="shrink-0 text-muted-foreground">
+                            Type
+                          </span>
+                          <span className="min-w-0 max-w-[68%] break-words text-right">
+                            {getGroupSectionLabel(group.type)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </Fragment>
+                )
+              })
+            ) : (
+              <div className="rounded-md border p-4 text-center text-sm text-muted-foreground">
+                No channel groups found.
+              </div>
+            )}
+          </div>
+          <div className="hidden max-w-full overflow-x-auto px-3 pb-2 sm:px-6 md:block">
             <Table className="w-full min-w-[520px]">
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
@@ -954,7 +1037,7 @@ export function ChannelGroups() {
             />
           </div>
 
-          <div className="rounded-md border p-4">
+          <div className="min-w-0 max-w-full overflow-hidden rounded-md border p-3 sm:p-4">
             <div className="mb-3">
               <div className="text-sm font-medium pb-3">Members</div>
             </div>
@@ -972,19 +1055,19 @@ export function ChannelGroups() {
                 <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
                   Member editing is disabled for this group type.
                 </div>
-                <div className="max-h-64 space-y-1 overflow-y-auto rounded-md border p-2">
+                <div className="max-h-64 min-w-0 max-w-full space-y-1 overflow-y-auto rounded-md border p-2">
                   {memberClients.length ? (
                     memberClients.map((client) => (
                       <label
-                        className="flex cursor-not-allowed items-start gap-2 rounded px-2 py-1.5 text-sm opacity-70"
+                        className="flex min-w-0 cursor-not-allowed items-start gap-2 rounded px-2 py-1.5 text-sm opacity-70"
                         key={String(client.cldbid)}
                       >
                         <Checkbox checked disabled />
-                        <span className="min-w-0">
-                          <span className="block truncate">
+                        <span className="min-w-0 flex-1">
+                          <span className="block max-w-full truncate">
                             {getClientLabel(client)}
                           </span>
-                          <span className="block truncate text-xs text-muted-foreground">
+                          <span className="block max-w-full truncate text-xs text-muted-foreground">
                             {client.clientUniqueIdentifier}
                           </span>
                         </span>
@@ -998,21 +1081,22 @@ export function ChannelGroups() {
                 </div>
               </div>
             ) : (
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
+              <div className="grid min-w-0 max-w-full gap-4 md:grid-cols-2">
+                <div className="min-w-0 space-y-2">
                   <Label htmlFor="channel-group-member-filter">Current members</Label>
                   <Input
+                    className="min-w-0"
                     id="channel-group-member-filter"
                     disabled={submitting}
                     placeholder="Search members"
                     value={memberFilter}
                     onChange={(event) => setMemberFilter(event.target.value)}
                   />
-                  <div className="max-h-64 space-y-1 overflow-y-auto rounded-md border p-2">
+                  <div className="max-h-64 min-w-0 max-w-full space-y-1 overflow-y-auto rounded-md border p-2">
                     {memberClients.length ? (
                       memberClients.map((client) => (
                         <label
-                          className="flex cursor-pointer items-start gap-2 rounded px-2 py-1.5 text-sm hover:bg-secondary/70"
+                          className="flex min-w-0 cursor-pointer items-start gap-2 rounded px-2 py-1.5 text-sm hover:bg-secondary/70"
                           key={String(client.cldbid)}
                         >
                           <Checkbox
@@ -1022,11 +1106,11 @@ export function ChannelGroups() {
                               if (checked !== true) removeMember(client)
                             }}
                           />
-                          <span className="min-w-0">
-                            <span className="block truncate">
+                          <span className="min-w-0 flex-1">
+                            <span className="block max-w-full truncate">
                               {getClientLabel(client)}
                             </span>
-                            <span className="block truncate text-xs text-muted-foreground">
+                            <span className="block max-w-full truncate text-xs text-muted-foreground">
                               {client.clientUniqueIdentifier}
                             </span>
                           </span>
@@ -1040,11 +1124,12 @@ export function ChannelGroups() {
                   </div>
                 </div>
 
-                <div className="space-y-2">
+                <div className="min-w-0 space-y-2">
                   <Label htmlFor="channel-group-available-filter">
                     Available clients
                   </Label>
                   <Input
+                    className="min-w-0"
                     id="channel-group-available-filter"
                     disabled={submitting}
                     placeholder="Search clients"
@@ -1053,11 +1138,11 @@ export function ChannelGroups() {
                       setAvailableClientFilter(event.target.value)
                     }
                   />
-                  <div className="max-h-64 space-y-1 overflow-y-auto rounded-md border p-2">
+                  <div className="max-h-64 min-w-0 max-w-full space-y-1 overflow-y-auto rounded-md border p-2">
                     {availableClients.length ? (
                       availableClients.map((client) => (
                         <label
-                          className="flex cursor-pointer items-start gap-2 rounded px-2 py-1.5 text-sm hover:bg-secondary/70"
+                          className="flex min-w-0 cursor-pointer items-start gap-2 rounded px-2 py-1.5 text-sm hover:bg-secondary/70"
                           key={String(client.cldbid)}
                         >
                           <Checkbox
@@ -1067,11 +1152,11 @@ export function ChannelGroups() {
                               if (checked === true) addMember(client)
                             }}
                           />
-                          <span className="min-w-0">
-                            <span className="block truncate">
+                          <span className="min-w-0 flex-1">
+                            <span className="block max-w-full truncate">
                               {getClientLabel(client)}
                             </span>
-                            <span className="block truncate text-xs text-muted-foreground">
+                            <span className="block max-w-full truncate text-xs text-muted-foreground">
                               {client.clientUniqueIdentifier}
                             </span>
                           </span>

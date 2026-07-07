@@ -43,6 +43,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
+import { copyTextToClipboard } from "@/lib/clipboard"
 
 type TokenType = "0" | "1"
 
@@ -673,7 +674,7 @@ export function Tokens() {
 
   const copyToken = async (token: string) => {
     try {
-      await navigator.clipboard.writeText(token)
+      await copyTextToClipboard(token)
       showInfo("Token Copied To Clipboard")
     } catch (error) {
       showError(getErrorMessage(error))
@@ -844,7 +845,128 @@ export function Tokens() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="max-w-full overflow-x-auto px-3 pb-2 sm:px-6">
+          <div className="space-y-2 px-3 pb-3 md:hidden">
+            {loadingTokens ? (
+              <div className="rounded-md border p-4 text-center text-sm text-muted-foreground">
+                ...loading
+              </div>
+            ) : visibleTokens.length ? (
+              visibleTokens.map((token) => {
+                const selected = selectedTokenSet.has(token.token)
+                const groupDisplay = getTokenGroupDisplay(token)
+                const channelDisplay = getTokenChannelDisplay(token)
+                const title = groupDisplay || token.token
+
+                return (
+                  <div
+                    className="rounded-md border p-3 text-sm"
+                    data-state={selected ? "selected" : undefined}
+                    key={token.token}
+                  >
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        checked={selected}
+                        onCheckedChange={(checked) =>
+                          toggleTokenSelection(token.token, checked === true)
+                        }
+                      />
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <div className="flex min-w-0 items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <div
+                              className="truncate font-medium"
+                              title={title}
+                            >
+                              {title}
+                            </div>
+                          </div>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                size="icon-sm"
+                                type="button"
+                                variant="ghost"
+                              >
+                                <MoreVertical className="size-4" />
+                                <span className="sr-only">
+                                  Open token actions
+                                </span>
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onSelect={() => openDeleteDialog([token])}
+                              >
+                                Delete Token
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onSelect={() => void copyToken(token.token)}
+                              >
+                                Copy Token
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                        <code
+                          className="inline-block max-w-full truncate rounded bg-muted px-2 py-1 align-top font-mono text-[11px]"
+                          title={token.token}
+                        >
+                          {token.token}
+                        </code>
+                        <div className="grid gap-2 text-xs">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-muted-foreground">Type</span>
+                            <span className="text-right">
+                              {normalizeTokenType(token.tokenType)}
+                            </span>
+                          </div>
+                          <div className="flex items-start justify-between gap-3">
+                            <span className="shrink-0 text-muted-foreground">
+                              Group
+                            </span>
+                            <span className="min-w-0 break-words text-right">
+                              {groupDisplay}
+                            </span>
+                          </div>
+                          <div className="flex items-start justify-between gap-3">
+                            <span className="shrink-0 text-muted-foreground">
+                              Channel
+                            </span>
+                            <span className="min-w-0 break-words text-right">
+                              {channelDisplay}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-muted-foreground">Created</span>
+                            <span className="text-right">
+                              {formatCreatedDate(token.tokenCreated)}
+                            </span>
+                          </div>
+                          {token.tokenDescription ? (
+                            <div className="flex items-start justify-between gap-3 text-xs">
+                              <span className="shrink-0 text-muted-foreground">Description</span>
+                              <span
+                                className="min-w-0 max-w-[44vw] truncate text-right"
+                                title={token.tokenDescription || ""}
+                              >
+                                {token.tokenDescription || "—"}
+                              </span>
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })
+            ) : (
+              <div className="rounded-md border p-4 text-center text-sm text-muted-foreground">
+                No tokens found.
+              </div>
+            )}
+          </div>
+          <div className="hidden max-w-full overflow-x-auto px-3 pb-2 sm:px-6 md:block">
             <Table className="w-full min-w-[1350px]">
               <TableHeader>
                 <TableRow>

@@ -234,7 +234,7 @@ function Sidebar({ open }: { open: boolean }) {
     <aside
       aria-hidden={!open}
       className={cn(
-        "hidden h-screen shrink-0 overflow-hidden transition-[width] duration-200 ease-in-out lg:block",
+        "hidden h-dvh shrink-0 overflow-hidden transition-[width] duration-200 ease-in-out lg:block",
         open ? "w-72" : "w-0",
       )}
     >
@@ -334,12 +334,12 @@ export function AppLayout() {
   }, [location.pathname])
 
   return (
-    <div className="h-screen overflow-hidden bg-background text-foreground">
-      <div className="flex h-screen min-h-0">
+    <div className="h-dvh overflow-hidden bg-background text-foreground">
+      <div className="flex h-dvh min-h-0">
         <Sidebar open={sidebarOpen} />
 
-        <div className="flex h-screen min-w-0 flex-1 flex-col overflow-hidden">
-          <header className="z-20 flex h-16 shrink-0 items-center justify-between border-b bg-background/95 px-4 backdrop-blur lg:px-6">
+        <div className="flex h-dvh min-w-0 flex-1 flex-col overflow-hidden">
+          <header className="sticky top-0 z-20 flex h-16 shrink-0 items-center justify-between border-b bg-background/95 px-4 backdrop-blur lg:px-6">
             <div className="flex min-w-0 items-center gap-3">
               <Button
                 aria-label="Open sidebar"
@@ -386,7 +386,7 @@ export function AppLayout() {
             </div>
           </header>
 
-          <main className="min-h-0 flex-1 overflow-y-auto p-4 lg:p-6">
+          <main className="min-h-0 flex-1 overflow-y-auto p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] lg:p-6">
             <Outlet />
           </main>
         </div>

@@ -1,4 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MouseEvent,
+  type PointerEvent,
+  type ReactElement,
+  type ReactNode,
+} from "react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import {
   ChevronRight,
@@ -248,6 +259,130 @@ function isFileActionDeleteSelected(
   return action?.type === "delete-selected"
 }
 
+function getTreeIndentStyle(mobile: number, desktop: number) {
+  return {
+    "--file-tree-mobile-indent": `${mobile}px`,
+    "--file-tree-desktop-indent": `${desktop}px`,
+  } as CSSProperties
+}
+
+const TOUCH_SCROLL_THRESHOLD_PX = 8
+
+type TouchSafeDropdownTriggerProps = {
+  onClickCapture: (event: MouseEvent<HTMLButtonElement>) => void
+  onPointerCancelCapture: () => void
+  onPointerDownCapture: (event: PointerEvent<HTMLButtonElement>) => void
+  onPointerMoveCapture: (event: PointerEvent<HTMLButtonElement>) => void
+  onPointerUpCapture: (event: PointerEvent<HTMLButtonElement>) => void
+}
+
+type TouchSafeDropdownProps = {
+  children: ReactNode
+  trigger: (triggerProps: TouchSafeDropdownTriggerProps) => ReactElement
+}
+
+function TouchSafeDropdown({ children, trigger }: TouchSafeDropdownProps) {
+  const [open, setOpen] = useState(false)
+  const touchPointerRef = useRef<{ moved: boolean; x: number; y: number } | null>(
+    null,
+  )
+  const blockNextClickRef = useRef(false)
+
+  const handlePointerDownCapture = useCallback(
+    (event: PointerEvent<HTMLButtonElement>) => {
+      if (event.pointerType !== "touch") {
+        return
+      }
+
+      touchPointerRef.current = {
+        moved: false,
+        x: event.clientX,
+        y: event.clientY,
+      }
+
+      event.stopPropagation()
+    },
+    [],
+  )
+
+  const handlePointerMoveCapture = useCallback(
+    (event: PointerEvent<HTMLButtonElement>) => {
+      const touchPointer = touchPointerRef.current
+
+      if (event.pointerType !== "touch" || !touchPointer) {
+        return
+      }
+
+      const distanceX = Math.abs(event.clientX - touchPointer.x)
+      const distanceY = Math.abs(event.clientY - touchPointer.y)
+
+      if (
+        distanceX > TOUCH_SCROLL_THRESHOLD_PX ||
+        distanceY > TOUCH_SCROLL_THRESHOLD_PX
+      ) {
+        touchPointer.moved = true
+        blockNextClickRef.current = true
+      }
+    },
+    [],
+  )
+
+  const handlePointerUpCapture = useCallback(
+    (event: PointerEvent<HTMLButtonElement>) => {
+      const touchPointer = touchPointerRef.current
+
+      if (event.pointerType !== "touch" || !touchPointer) {
+        return
+      }
+
+      event.stopPropagation()
+
+      const moved = touchPointer.moved
+
+      touchPointerRef.current = null
+      blockNextClickRef.current = true
+
+      if (!moved) {
+        setOpen((currentOpen) => !currentOpen)
+      }
+    },
+    [],
+  )
+
+  const handlePointerCancelCapture = useCallback(() => {
+    touchPointerRef.current = null
+    blockNextClickRef.current = true
+  }, [])
+
+  const handleClickCapture = useCallback(
+    (event: MouseEvent<HTMLButtonElement>) => {
+      if (!blockNextClickRef.current) {
+        return
+      }
+
+      event.preventDefault()
+      event.stopPropagation()
+      blockNextClickRef.current = false
+    },
+    [],
+  )
+
+  return (
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger asChild>
+        {trigger({
+          onClickCapture: handleClickCapture,
+          onPointerCancelCapture: handlePointerCancelCapture,
+          onPointerDownCapture: handlePointerDownCapture,
+          onPointerMoveCapture: handlePointerMoveCapture,
+          onPointerUpCapture: handlePointerUpCapture,
+        })}
+      </DropdownMenuTrigger>
+      {children}
+    </DropdownMenu>
+  )
+}
+
 function FileTreeRow({
   actionBusy,
   childCache,
@@ -287,19 +422,20 @@ function FileTreeRow({
   const expanded = expandedKeys.has(parentKey)
   const loading = loadingKeys.has(parentKey)
   const children = childCache[parentKey] ?? []
-  const paddingLeft = depth * 18 + 12
+  const desktopPaddingLeft = depth * 18 + 12
+  const mobilePaddingLeft = Math.min(depth * 10 + 8, 56)
   const dateLabel = formatDate(item.datetime)
 
   return (
     <>
       <div
-        className="grid min-h-10 grid-cols-[32px_32px_minmax(0,1fr)] items-center gap-1 border-b px-2 text-sm last:border-b-0 hover:bg-muted/40"
-        style={{ paddingLeft }}
+        className="grid min-h-12 grid-cols-[28px_28px_minmax(0,1fr)] items-center gap-1 border-b pl-[var(--file-tree-mobile-indent)] pr-2 text-sm last:border-b-0 hover:bg-muted/40 sm:min-h-10 sm:grid-cols-[32px_32px_minmax(0,1fr)] sm:pl-[var(--file-tree-desktop-indent)]"
+        style={getTreeIndentStyle(mobilePaddingLeft, desktopPaddingLeft)}
       >
         {folder ? (
           <button
             aria-label={expanded ? "Collapse folder" : "Expand folder"}
-            className="flex size-7 items-center justify-center rounded-md hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex size-8 items-center justify-center rounded-md hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:size-7"
             type="button"
             onClick={() => onToggle(parent)}
           >
@@ -317,13 +453,14 @@ function FileTreeRow({
           onCheckedChange={(checked) => onToggleSelected(item, checked === true)}
         />
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
+        <TouchSafeDropdown
+          trigger={(triggerProps) => (
             <button
               aria-label={"Open actions for " + item.name}
-              className="flex min-w-0 items-center gap-2 rounded-md py-1 text-left hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-60"
+              className="flex min-w-0 items-center gap-2 rounded-md py-2 text-left hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-60 sm:py-1"
               disabled={actionBusy}
               type="button"
+              {...triggerProps}
             >
               {folder ? (
                 expanded ? (
@@ -346,8 +483,12 @@ function FileTreeRow({
                 </span>
               ) : null}
             </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-64">
+          )}
+        >
+          <DropdownMenuContent
+            align="start"
+            className="w-56 max-w-[calc(100vw-2rem)] sm:w-64"
+          >
             {folder ? (
               <>
                 <DropdownMenuItem onSelect={() => onUpload(parent)}>
@@ -384,7 +525,7 @@ function FileTreeRow({
               </>
             )}
           </DropdownMenuContent>
-        </DropdownMenu>
+        </TouchSafeDropdown>
       </div>
 
       {folder && expanded ? (
@@ -443,13 +584,14 @@ function TreeChildren({
   onToggleSelected: (item: FileRow, checked: boolean) => void
   selectedKeys?: Set<string>
 }) {
-  const paddingLeft = depth * 18 + 48
+  const desktopPaddingLeft = depth * 18 + 48
+  const mobilePaddingLeft = Math.min(depth * 10 + 36, 80)
 
   if (loading) {
     return (
       <div
-        className="border-b px-2 py-2 text-sm text-muted-foreground"
-        style={{ paddingLeft }}
+        className="border-b py-2 pl-[var(--file-tree-mobile-indent)] pr-2 text-sm text-muted-foreground sm:pl-[var(--file-tree-desktop-indent)]"
+        style={getTreeIndentStyle(mobilePaddingLeft, desktopPaddingLeft)}
       >
         Loading files...
       </div>
@@ -459,8 +601,8 @@ function TreeChildren({
   if (!childrenItems.length) {
     return (
       <div
-        className="border-b px-2 py-2 text-sm text-muted-foreground"
-        style={{ paddingLeft }}
+        className="border-b py-2 pl-[var(--file-tree-mobile-indent)] pr-2 text-sm text-muted-foreground sm:pl-[var(--file-tree-desktop-indent)]"
+        style={getTreeIndentStyle(mobilePaddingLeft, desktopPaddingLeft)}
       >
         This folder is empty.
       </div>
@@ -1103,10 +1245,10 @@ export function Files() {
 
                 return (
                   <div key={String(channel.cid)}>
-                    <div className="grid min-h-10 grid-cols-[32px_32px_minmax(0,1fr)] items-center gap-1 border-b px-2 text-sm hover:bg-muted/40">
+                    <div className="grid min-h-12 grid-cols-[28px_28px_minmax(0,1fr)] items-center gap-1 border-b px-2 text-sm hover:bg-muted/40 sm:min-h-10 sm:grid-cols-[32px_32px_minmax(0,1fr)]">
                       <button
                         aria-label={expanded ? "Collapse channel" : "Expand channel"}
-                        className="flex size-7 items-center justify-center rounded-md hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className="flex size-8 items-center justify-center rounded-md hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:size-7"
                         type="button"
                         onClick={() => toggleParent(parent)}
                       >
@@ -1118,13 +1260,14 @@ export function Files() {
                         />
                       </button>
                       <Checkbox checked={false} disabled />
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
+                      <TouchSafeDropdown
+                        trigger={(triggerProps) => (
                           <button
                             aria-label={"Open actions for " + channel.channelName}
-                            className="flex min-w-0 items-center gap-2 rounded-md py-1 text-left hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-60"
+                            className="flex min-w-0 items-center gap-2 rounded-md py-2 text-left hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-60 sm:py-1"
                             disabled={actionBusy}
                             type="button"
+                            {...triggerProps}
                           >
                             {expanded ? (
                               <FolderOpen className="size-4 shrink-0 text-muted-foreground" />
@@ -1135,8 +1278,12 @@ export function Files() {
                               {channel.channelName}
                             </span>
                           </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className="w-64">
+                        )}
+                      >
+                        <DropdownMenuContent
+                          align="start"
+                          className="w-56 max-w-[calc(100vw-2rem)] sm:w-64"
+                        >
                           <DropdownMenuItem onSelect={() => openUpload(parent)}>
                             <Upload className="size-4" />
                             Upload File
@@ -1154,7 +1301,7 @@ export function Files() {
                             Delete Folder
                           </DropdownMenuItem>
                         </DropdownMenuContent>
-                      </DropdownMenu>
+                      </TouchSafeDropdown>
                     </div>
 
                     {expanded ? (

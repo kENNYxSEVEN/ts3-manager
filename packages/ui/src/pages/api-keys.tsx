@@ -37,6 +37,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { copyTextToClipboard } from "@/lib/clipboard"
 
 type ApiKeyRow = {
   apikey?: string
@@ -693,7 +694,7 @@ export function ApiKeys() {
 
   const copyApiKey = async (apiKey: string) => {
     try {
-      await navigator.clipboard.writeText(apiKey)
+      await copyTextToClipboard(apiKey)
       showInfo("API Key Copied To Clipboard")
     } catch (error) {
       showError(getErrorMessage(error))
@@ -842,7 +843,73 @@ export function ApiKeys() {
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="max-w-full overflow-x-auto px-3 pb-2 sm:px-6">
+          <div className="space-y-2 px-3 pb-3 md:hidden">
+            {loading ? (
+              <div className="rounded-md border p-4 text-center text-sm text-muted-foreground">
+                ...loading
+              </div>
+            ) : visibleApiKeys.length ? (
+              visibleApiKeys.map((apiKey) => {
+                const id = String(apiKey.id)
+                const selected = selectedApiKeyIdSet.has(id)
+                const clientDisplay = getClientDisplay(apiKey)
+
+                return (
+                  <div
+                    className="rounded-md border p-3 text-sm"
+                    data-state={selected ? "selected" : undefined}
+                    key={id}
+                  >
+                    <div className="flex items-start gap-3">
+                      <Checkbox
+                        checked={selected}
+                        onCheckedChange={(checked) =>
+                          toggleApiKeySelection(id, checked === true)
+                        }
+                      />
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <div
+                          className="truncate font-medium"
+                          title={clientDisplay}
+                        >
+                          {clientDisplay}
+                        </div>
+                        <div className="grid gap-2 text-xs">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-muted-foreground">Scope</span>
+                            <span className="min-w-0 truncate text-right">
+                              {apiKey.scope ?? ""}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-muted-foreground">
+                              Created At
+                            </span>
+                            <span className="text-right">
+                              {formatDate(apiKey.createdAt)}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-muted-foreground">
+                              Expires At
+                            </span>
+                            <span className="text-right">
+                              {formatDate(apiKey.expiresAt)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })
+            ) : (
+              <div className="rounded-md border p-4 text-center text-sm text-muted-foreground">
+                No API keys found.
+              </div>
+            )}
+          </div>
+          <div className="hidden max-w-full overflow-x-auto px-3 pb-2 sm:px-6 md:block">
             <Table className="w-full min-w-[760px]">
               <TableHeader>
                 <TableRow>

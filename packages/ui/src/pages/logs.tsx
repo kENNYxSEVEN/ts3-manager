@@ -647,7 +647,73 @@ export function Logs() {
           </CardHeader>
 
           <CardContent className="p-0">
-            <div className="max-w-full overflow-x-auto">
+            <div className="space-y-2 p-3 md:hidden">
+              {loading && !logView.length ? (
+                <div className="rounded-md border p-4 text-center text-sm text-muted-foreground">
+                  ...loading
+                </div>
+              ) : visibleLogs.length ? (
+                visibleLogs.map((log, index) => (
+                  <div
+                    className="rounded-md border p-3 text-sm"
+                    key={`${log.rawTimestamp}:${index}`}
+                  >
+                    <div className="grid gap-2">
+                      <div className="flex min-w-0 items-center justify-between gap-3">
+                        <span className="shrink-0 text-xs font-medium text-muted-foreground">
+                          Timestamp
+                        </span>
+                        <span
+                          className="min-w-0 truncate text-right font-mono text-xs text-foreground"
+                          title={log.timestamp}
+                        >
+                          {log.timestamp}
+                        </span>
+                      </div>
+                      <div className="flex min-w-0 items-center justify-between gap-3">
+                        <span className="shrink-0 text-xs font-medium text-muted-foreground">
+                          Level
+                        </span>
+                        <Badge
+                          className={cn(
+                            "shrink-0 rounded-sm border font-mono uppercase",
+                            getLevelBadgeClass(log.level),
+                          )}
+                          variant="outline"
+                        >
+                          {log.level}
+                        </Badge>
+                      </div>
+                      <div className="flex min-w-0 items-center justify-between gap-3">
+                        <span className="shrink-0 text-xs font-medium text-muted-foreground">
+                          Channel
+                        </span>
+                        <span
+                          className="min-w-0 truncate text-right font-mono text-xs text-muted-foreground"
+                          title={log.channel}
+                        >
+                          {log.channel}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 border-t pt-3">
+                      <div className="text-xs font-medium text-muted-foreground">
+                        Message
+                      </div>
+                      <div className="mt-2 whitespace-pre-wrap break-words font-mono text-xs leading-5 text-foreground">
+                        {log.msg}
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-md border p-4 text-center text-sm text-muted-foreground">
+                  No logs found.
+                </div>
+              )}
+            </div>
+            <div className="hidden max-w-full overflow-x-auto md:block">
               <Table>
                 <TableHeader>
                   <TableRow>
